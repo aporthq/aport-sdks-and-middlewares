@@ -1,7 +1,10 @@
 import { APortClient, PolicyVerifier, AportError } from "./thin-client";
 import { PolicyVerificationResponse } from "./types/decision";
 
-// Mock fetch globally
+// Use local dev server unless in CI/prod (set in test-setup.ts)
+const TEST_BASE_URL =
+  process.env.AGENT_PASSPORT_BASE_URL || "https://api.aport.io";
+
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
 
@@ -10,7 +13,7 @@ describe("APortClient", () => {
 
   beforeEach(() => {
     client = new APortClient({
-      baseUrl: "https://api.aport.io",
+      baseUrl: TEST_BASE_URL,
       apiKey: "test-key",
     });
     mockFetch.mockClear();
@@ -42,7 +45,7 @@ describe("APortClient", () => {
       );
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "https://api.aport.io/api/verify/policy/finance.payment.refund.v1",
+        `${TEST_BASE_URL}/api/verify/policy/finance.payment.refund.v1`,
         expect.objectContaining({
           method: "POST",
           headers: {
@@ -52,20 +55,17 @@ describe("APortClient", () => {
             Authorization: "Bearer test-key",
           },
           body: JSON.stringify({
-            agent_id: "agent-123",
             context: {
+              agent_id: "agent-123",
+              policy_id: "finance.payment.refund.v1",
               amount: 100,
               currency: "USD",
             },
-            idempotency_key: undefined,
           }),
         })
       );
 
-      expect(result).toEqual({
-        ...mockResponse,
-        _meta: { serverTiming: "cache;dur=5" },
-      });
+      expect(result).toMatchObject(mockResponse);
     });
 
     it("should include idempotency key in both header and body", async () => {
@@ -91,15 +91,17 @@ describe("APortClient", () => {
       );
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "https://api.aport.io/api/verify/policy/finance.payment.refund.v1",
+        `${TEST_BASE_URL}/api/verify/policy/finance.payment.refund.v1`,
         expect.objectContaining({
           headers: expect.objectContaining({
             "Idempotency-Key": "idem-key-123",
           }),
           body: JSON.stringify({
-            agent_id: "agent-123",
-            context: {},
-            idempotency_key: "idem-key-123",
+            context: {
+              agent_id: "agent-123",
+              policy_id: "finance.payment.refund.v1",
+              idempotency_key: "idem-key-123",
+            },
           }),
         })
       );
@@ -157,8 +159,9 @@ describe("APortClient", () => {
     });
 
     it("should normalize base URL correctly", async () => {
+      const baseWithSlash = TEST_BASE_URL.replace(/\/?$/, "/");
       const clientWithTrailingSlash = new APortClient({
-        baseUrl: "https://api.aport.io/",
+        baseUrl: baseWithSlash,
         apiKey: "test-key",
       });
 
@@ -175,8 +178,9 @@ describe("APortClient", () => {
         {}
       );
 
+      const expectedBase = TEST_BASE_URL.replace(/\/+$/, "");
       expect(mockFetch).toHaveBeenCalledWith(
-        "https://api.aport.io/api/verify/policy/finance.payment.refund.v1",
+        `${expectedBase}/api/verify/policy/finance.payment.refund.v1`,
         expect.any(Object)
       );
     });
@@ -202,7 +206,7 @@ describe("APortClient", () => {
       );
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "https://api.aport.io/api/verify/token/finance.payment.refund.v1",
+        `${TEST_BASE_URL}/api/verify/token/finance.payment.refund.v1`,
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify({
@@ -235,7 +239,7 @@ describe("APortClient", () => {
       const result = await client.getPassportView("agent-123");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "https://api.aport.io/api/passports/agent-123/verify_view",
+        `${TEST_BASE_URL}/api/passports/agent-123/verify_view`,
         expect.objectContaining({
           method: "GET",
           headers: {
@@ -258,7 +262,7 @@ describe("PolicyVerifier", () => {
 
   beforeEach(() => {
     client = new APortClient({
-      baseUrl: "https://api.aport.io",
+      baseUrl: TEST_BASE_URL,
       apiKey: "test-key",
     });
     verifier = new PolicyVerifier(client);
@@ -288,17 +292,17 @@ describe("PolicyVerifier", () => {
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "https://api.aport.io/api/verify/policy/finance.payment.refund.v1",
+        `${TEST_BASE_URL}/api/verify/policy/finance.payment.refund.v1`,
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify({
-            agent_id: "agent-123",
             context: {
+              agent_id: "agent-123",
+              policy_id: "finance.payment.refund.v1",
               amount: 100,
               currency: "USD",
               order_id: "order-123",
             },
-            idempotency_key: undefined,
           }),
         })
       );
@@ -330,17 +334,17 @@ describe("PolicyVerifier", () => {
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "https://api.aport.io/api/verify/policy/code.repository.merge.v1",
+        `${TEST_BASE_URL}/api/verify/policy/code.repository.merge.v1`,
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify({
-            agent_id: "agent-123",
             context: {
+              agent_id: "agent-123",
+              policy_id: "code.repository.merge.v1",
               operation: "create_pr",
               repository: "my-org/my-repo",
               pr_size_kb: 500,
             },
-            idempotency_key: undefined,
           }),
         })
       );

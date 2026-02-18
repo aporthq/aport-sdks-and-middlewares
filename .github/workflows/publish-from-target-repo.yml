@@ -42,6 +42,17 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           scope: "@aporthq"
 
+      - name: Resolve VERSION
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+          elif [[ -n "${{ github.event.inputs.version }}" ]]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+          else
+            echo "VERSION=$(node -p "require('./sdk/node/package.json').version")" >> $GITHUB_ENV
+          fi
+          echo "Resolved VERSION=$VERSION"
+
       - name: Global build verification
         run: |
           echo "🔍 Verifying all packages can build..."
@@ -85,12 +96,6 @@ jobs:
       - name: Check if package already exists
         run: |
           cd sdk/node
-          # Extract version from tag or use input version
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
-          else
-            VERSION=${{ github.event.inputs.version }}
-          fi
           echo "Checking if version $VERSION already exists on npm..."
           if npm view @aporthq/sdk-node@$VERSION version >/dev/null 2>&1; then
             echo "Version $VERSION already exists on npm - skipping publish"
@@ -148,12 +153,6 @@ jobs:
       - name: Verify publication
         if: env.SKIP_PUBLISH != 'true'
         run: |
-          # Extract version from tag or use input version
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
-          else
-            VERSION=${{ github.event.inputs.version }}
-          fi
           echo "Verifying @aporthq/sdk-node@$VERSION is available on npm..."
           npm view @aporthq/sdk-node@$VERSION version
 
@@ -212,6 +211,17 @@ jobs:
         with:
           python-version: "3.10"
 
+      - name: Resolve VERSION
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+          elif [[ -n "${{ github.event.inputs.version }}" ]]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+          else
+            echo "VERSION=$(node -p "require('./sdk/node/package.json').version")" >> $GITHUB_ENV
+          fi
+          echo "Resolved VERSION=$VERSION"
+
       - name: Validate package structure
         run: |
           cd sdk/python
@@ -237,12 +247,6 @@ jobs:
       - name: Check if package already exists
         run: |
           cd sdk/python
-          # Extract version from tag or use input version
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
-          else
-            VERSION=${{ github.event.inputs.version }}
-          fi
           echo "Checking if version $VERSION already exists on PyPI..."
           python -c "
           import requests
@@ -315,12 +319,6 @@ jobs:
       - name: Verify publication
         if: env.SKIP_PUBLISH != 'true'
         run: |
-          # Extract version from tag or use input version
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
-          else
-            VERSION=${{ github.event.inputs.version }}
-          fi
           echo "Verifying aporthq-sdk-python@$VERSION is available on PyPI..."
           python -c "
           import requests
@@ -356,6 +354,17 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           scope: "@aporthq"
 
+      - name: Resolve VERSION
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+          elif [[ -n "${{ github.event.inputs.version }}" ]]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+          else
+            echo "VERSION=$(node -p "require('./sdk/node/package.json').version")" >> $GITHUB_ENV
+          fi
+          echo "Resolved VERSION=$VERSION"
+
       - name: Check if Express middleware directory exists
         run: |
           if [ ! -d "middleware/express" ]; then
@@ -373,12 +382,6 @@ jobs:
       - name: Check if package already exists
         run: |
           cd middleware/express
-          # Extract version from tag or use input version
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
-          else
-            VERSION=${{ github.event.inputs.version }}
-          fi
           echo "Checking if version $VERSION already exists on npm..."
           if npm view @aporthq/middleware-express@$VERSION version >/dev/null 2>&1; then
             echo "Version $VERSION already exists on npm - skipping publish"
@@ -456,12 +459,6 @@ jobs:
       - name: Verify publication
         if: env.SKIP_PUBLISH != 'true'
         run: |
-          # Extract version from tag or use input version
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
-          else
-            VERSION=${{ github.event.inputs.version }}
-          fi
           echo "Verifying @aporthq/middleware-express@$VERSION is available on npm..."
           npm view @aporthq/middleware-express@$VERSION version
 
@@ -483,6 +480,17 @@ jobs:
         with:
           python-version: "3.10"
 
+      - name: Resolve VERSION
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+          elif [[ -n "${{ github.event.inputs.version }}" ]]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+          else
+            echo "VERSION=$(node -p "require('./sdk/node/package.json').version")" >> $GITHUB_ENV
+          fi
+          echo "Resolved VERSION=$VERSION"
+
       - name: Check if FastAPI middleware directory exists
         run: |
           if [ ! -d "middleware/fastapi" ]; then
@@ -500,12 +508,6 @@ jobs:
       - name: Check if package already exists
         run: |
           cd middleware/fastapi
-          # Extract version from tag or use input version
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
-          else
-            VERSION=${{ github.event.inputs.version }}
-          fi
           echo "Checking if version $VERSION already exists on PyPI..."
           python -c "
           import requests
@@ -603,12 +605,6 @@ jobs:
       - name: Verify publication
         if: env.SKIP_PUBLISH != 'true'
         run: |
-          # Extract version from tag or use input version
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
-          else
-            VERSION=${{ github.event.inputs.version }}
-          fi
           echo "Verifying aporthq-middleware-fastapi@$VERSION is available on PyPI..."
           python -c "
           import requests
