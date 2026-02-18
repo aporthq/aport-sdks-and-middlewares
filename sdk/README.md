@@ -5,94 +5,113 @@ This directory contains SDKs and middleware for integrating with The Passport fo
 ## 📦 Available Packages
 
 ### Node.js SDK
-- **Package**: `@agent-passport/sdk-node`
+- **Package**: `@aporthq/sdk-node`
 - **Location**: `./node/`
-- **Description**: Node.js SDK with fetch wrapper and verification utilities
+- **Description**: Node.js thin client for policy verification and passport views (fetch-based)
 
 ### Python SDK
-- **Package**: `agent-passport-sdk`
+- **Package**: `aporthq-sdk-python`
 - **Location**: `./python/`
-- **Description**: Python SDK with requests session and verification utilities
+- **Description**: Python thin client for policy verification and passport views (async aiohttp)
 
 ### Express.js Middleware
-- **Package**: `@agent-passport/middleware-express`
-- **Location**: `./middleware/express/`
-- **Description**: Express.js middleware for automatic agent verification
+- **Package**: `@aporthq/middleware-express`
+- **Location**: `../middleware/express/`
+- **Description**: Express.js middleware for agent verification and policy enforcement
 
 ### FastAPI Middleware
-- **Package**: `agent-passport-middleware-fastapi`
-- **Location**: `./middleware/fastapi/`
-- **Description**: FastAPI middleware for automatic agent verification
+- **Package**: `aporthq-middleware-fastapi`
+- **Location**: `../middleware/fastapi/`
+- **Description**: FastAPI middleware for agent verification and policy enforcement
 
 ## 🚀 Quick Start
 
 ### Node.js
 
 ```bash
-npm install @agent-passport/sdk-node
+npm install @aporthq/sdk-node
 ```
 
 ```javascript
-import { withAgentPassportId, verifyAgentPassport } from '@agent-passport/sdk-node';
+import { APortClient, PolicyVerifier, AportError } from '@aporthq/sdk-node';
 
-// Wrap fetch to automatically include agent passport header
-const fetchWithAgent = withAgentPassportId('ap_a2d10232c6534523812423eec8a1425c4567890abcdef');
-const response = await fetchWithAgent('https://api.example.com/data');
+const client = new APortClient({
+  baseUrl: 'https://api.aport.io',
+  apiKey: 'your-api-key',
+  timeoutMs: 800,
+});
 
-// Verify agent passport
-const agent = await verifyAgentPassport('ap_a2d10232c6534523812423eec8a1425c4567890abcdef');
+const decision = await client.verifyPolicy(
+  'your-agent-id',
+  'finance.payment.refund.v1',
+  { amount: 1000, currency: 'USD', order_id: 'order_123' }
+);
+if (decision.allow) console.log('Allowed:', decision.decision_id);
 ```
 
 ### Python
 
 ```bash
-pip install agent-passport-sdk
+pip install aporthq-sdk-python
 ```
 
 ```python
-from aporthq_sdk_python import agent_session, AgentPassportClient
+import asyncio
+from aporthq_sdk_python import APortClient, APortClientOptions, AportError
 
-# Use agent session for automatic header injection
-with agent_session('ap_a2d10232c6534523812423eec8a1425c4567890abcdef') as session:
-    response = session.get('https://api.example.com/data')
+async def main():
+    client = APortClient(APortClientOptions(
+        base_url="https://api.aport.io",
+        api_key="your-api-key",
+        timeout_ms=800,
+    ))
+    decision = await client.verify_policy(
+        "your-agent-id",
+        "finance.payment.refund.v1",
+        {"amount": 1000, "currency": "USD", "order_id": "order_123"},
+    )
+    if decision.allow:
+        print("Allowed:", decision.decision_id)
 
-# Or use client for verification
-client = AgentPassportClient()
-agent = client.verify_agent_passport('ap_a2d10232c6534523812423eec8a1425c4567890abcdef')
+asyncio.run(main())
 ```
 
 ### Express.js Middleware
 
 ```bash
-npm install @agent-passport/middleware-express
+npm install @aporthq/middleware-express
 ```
 
 ```javascript
 const express = require('express');
-const { agentPassportMiddleware } = require('@agent-passport/middleware-express');
+const { agentPassportMiddleware, requirePolicy } = require('@aporthq/middleware-express');
 
 const app = express();
-app.use(agentPassportMiddleware());
+app.use(express.json());
+app.use(agentPassportMiddleware({ policyId: 'finance.payment.refund.v1' }));
 
-app.get('/api/data', (req, res) => {
-  res.json({ agent_id: req.agent.agent_id });
+app.post('/api/refunds', (req, res) => {
+  res.json({ agent_id: req.agent.agent_id, policyResult: req.policyResult });
 });
 ```
 
 ### FastAPI Middleware
 
 ```bash
-pip install agent-passport-middleware-fastapi
+pip install aporthq-middleware-fastapi
 ```
 
 ```python
 from fastapi import FastAPI, Request
-from aporthq_middleware_fastapi import agent_passport_middleware
+from aporthq_middleware_fastapi import AgentPassportMiddleware, AgentPassportMiddlewareOptions
 
 app = FastAPI()
-app.add_middleware(agent_passport_middleware())
+app.add_middleware(
+    AgentPassportMiddleware,
+    options=AgentPassportMiddlewareOptions(policy_id="finance.payment.refund.v1"),
+)
 
-@app.get("/api/data")
+@app.post("/api/refunds")
 async def get_data(request: Request):
     return {"agent_id": request.state.agent.agent_id}
 ```
@@ -173,13 +192,13 @@ pytest
 
 ```bash
 # Express.js Middleware
-cd middleware/express/
+cd ../middleware/express/
 npm install
 npm run build
 npm test
 
 # FastAPI Middleware
-cd middleware/fastapi/
+cd ../middleware/fastapi/
 pip install -e ".[dev]"
 pytest
 ```
@@ -189,8 +208,8 @@ pytest
 - [Transport Profile Specification](../spec/transport-profile.md) - Complete transport specification
 - [Node.js SDK Documentation](./node/README.md) - Node.js SDK documentation
 - [Python SDK Documentation](./python/README.md) - Python SDK documentation
-- [Express.js Middleware Documentation](./middleware/express/README.md) - Express.js middleware documentation
-- [FastAPI Middleware Documentation](./middleware/fastapi/README.md) - FastAPI middleware documentation
+- [Express.js Middleware Documentation](../middleware/express/README.md) - Express.js middleware documentation
+- [FastAPI Middleware Documentation](../middleware/fastapi/README.md) - FastAPI middleware documentation
 
 ## 🤝 Contributing
 

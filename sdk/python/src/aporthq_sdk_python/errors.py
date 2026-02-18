@@ -1,26 +1,26 @@
 """
-Custom error types for the APort Python SDK
+Custom error types for the APort Python SDK.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 
 class AportError(Exception):
-    """Custom error for APort API failures."""
-    
+    """Raised when an APort API request fails (non-2xx status or network error)."""
+
     def __init__(
         self,
         status: int,
-        reasons: Optional[List[Dict[str, str]]] = None,
+        reasons: Optional[List[Dict[str, Any]]] = None,
         decision_id: Optional[str] = None,
         server_timing: Optional[str] = None,
         raw_response: Optional[str] = None,
     ):
-        message = (
-            f"API request failed: {status} {', '.join([r['message'] for r in reasons])}"
-            if reasons
-            else f"API request failed: {status}"
-        )
+        if reasons:
+            parts = [str(r.get("message", r)) for r in reasons]
+            message = f"API request failed: {status} {', '.join(parts)}"
+        else:
+            message = f"API request failed: {status}"
         
         super().__init__(message)
         self.name = "AportError"

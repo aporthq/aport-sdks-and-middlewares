@@ -3,6 +3,7 @@ import express from "express";
 import {
   agentPassportMiddleware,
   requirePolicy,
+  requirePolicyWithContext,
   requireRefundPolicy,
   requireDataExportPolicy,
   AgentRequest,
@@ -226,6 +227,60 @@ describe("requirePolicy", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
+  });
+});
+
+describe("requirePolicyWithContext", () => {
+  let app: express.Application;
+
+  beforeEach(() => {
+    app = express();
+    mockFetch.mockClear();
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("should merge custom context with body and enforce policy", async () => {
+    const mockPolicyResponse = {
+      decision_id: "dec_ctx",
+      allow: true,
+      reasons: [],
+    };
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify(mockPolicyResponse), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }) as any
+    );
+
+    app.use(express.json());
+    app.post(
+      "/export",
+      requirePolicyWithContext(
+        "data.export.create.v1",
+        { destination: "s3://bucket", format: "csv" }
+      ),
+      (req: AgentRequest, res: any) => {
+        res.json({ success: true, agent_id: req.agent?.agent_id });
+      }
+    );
+
+    const response = await request(app)
+      .post("/export")
+      .set("X-Agent-Passport-Id", "ap_ctx123")
+      .send({ rows: 10, contains_pii: false });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/verify/policy/data.export.create.v1"),
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringMatching(/destination|rows|contains_pii/),
+      })
+    );
   });
 });
 

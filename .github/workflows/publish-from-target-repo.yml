@@ -211,6 +211,11 @@ jobs:
         with:
           python-version: "3.10"
 
+      - name: Setup Node.js (for VERSION from sdk/node/package.json)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       - name: Resolve VERSION
         run: |
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
@@ -222,6 +227,11 @@ jobs:
           fi
           echo "Resolved VERSION=$VERSION"
 
+      - name: Install dependencies
+        run: |
+          cd sdk/python
+          pip install build twine pytest requests tomli
+
       - name: Validate package structure
         run: |
           cd sdk/python
@@ -230,7 +240,7 @@ jobs:
             echo "Error: pyproject.toml not found"
             exit 1
           fi
-          # Validate package name
+          # Validate package name (tomli installed in previous step)
           python -c "import tomli; data = tomli.load(open('pyproject.toml', 'rb')); print(f'Package: {data[\"project\"][\"name\"]}')"
 
       - name: Clean build artifacts
@@ -238,11 +248,6 @@ jobs:
           cd sdk/python
           rm -rf dist/ build/ src/*.egg-info/
           echo "✅ Cleaned Python SDK build artifacts"
-
-      - name: Install dependencies
-        run: |
-          cd sdk/python
-          pip install build twine pytest requests tomli
 
       - name: Check if package already exists
         run: |
@@ -400,32 +405,13 @@ jobs:
       - name: Install dependencies
         run: |
           cd middleware/express
-          npm ci
+          npm install
 
-      - name: Debug directory structure
-        run: |
-          echo "Current directory structure:"
-          find . -name "package.json" | head -10
-          echo "Contents of middleware/express:"
-          ls -la middleware/express/
-          echo "Contents of sdk:"
-          ls -la sdk/
-
-      - name: Install local SDK
+      - name: Install published SDK (same version as this release)
         run: |
           cd middleware/express
-          # Try different paths to find the SDK
-          if [ -f "../sdk/node/package.json" ]; then
-            echo "Installing from ../sdk/node"
-            npm install ../sdk/node
-          elif [ -f "../../sdk/node/package.json" ]; then
-            echo "Installing from ../../sdk/node"
-            npm install ../../sdk/node
-          else
-            echo "SDK not found, listing available directories:"
-            find . -name "package.json" -path "*/sdk/*"
-            exit 1
-          fi
+          npm install @aporthq/sdk-node@$VERSION
+          echo "✅ Using @aporthq/sdk-node@$VERSION from npm"
 
       - name: Build
         run: |
@@ -479,6 +465,11 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: "3.10"
+
+      - name: Setup Node.js (for VERSION from sdk/node/package.json)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
 
       - name: Resolve VERSION
         run: |
@@ -546,30 +537,10 @@ jobs:
           cd middleware/fastapi
           pip install build twine pytest requests tomli
 
-      - name: Debug directory structure
+      - name: Install published Python SDK (same version as this release)
         run: |
-          echo "Current directory structure:"
-          find . -name "setup.py" | head -10
-          echo "Contents of middleware/fastapi:"
-          ls -la middleware/fastapi/
-          echo "Contents of sdk:"
-          ls -la sdk/
-
-      - name: Install local SDK
-        run: |
-          cd middleware/fastapi
-          # Try different paths to find the SDK
-          if [ -f "../sdk/python/setup.py" ]; then
-            echo "Installing from ../sdk/python"
-            pip install -e ../sdk/python
-          elif [ -f "../../sdk/python/setup.py" ]; then
-            echo "Installing from ../../sdk/python"
-            pip install -e ../../sdk/python
-          else
-            echo "SDK not found, listing available directories:"
-            find . -name "setup.py" -path "*/sdk/*"
-            exit 1
-          fi
+          pip install aporthq-sdk-python==$VERSION
+          echo "✅ Using aporthq-sdk-python==$VERSION from PyPI"
 
       - name: Build package
         run: |

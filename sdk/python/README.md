@@ -102,12 +102,20 @@ Initializes the APort client.
 - `options.api_key` (str, optional): Your API Key for authenticated requests.
 - `options.timeout_ms` (int, optional): Request timeout in milliseconds (default: 800ms).
 
-#### `async verify_policy(agent_id: str, policy_id: str, context: Dict[str, Any] = None, idempotency_key: str = None) -> PolicyVerificationResponse`
-Verifies a policy against an agent by calling the `/api/verify/policy/:pack_id` endpoint.
+#### `async verify_policy(agent_id: str, policy_id: str, context: Dict[str, Any] = None, idempotency_key: str = None, *, passport: Dict = None, policy: PolicyPack = None) -> PolicyVerificationResponse`
+Verifies a policy against an agent by calling the `/api/verify/policy/:pack_id` endpoint. Optionally pass `passport` and/or `policy` as keyword-only args for local/dynamic mode.
 - `agent_id` (str): The ID of the agent.
 - `policy_id` (str): The ID of the policy pack (e.g., `finance.payment.refund.v1`, `code.release.publish.v1`).
 - `context` (Dict[str, Any], optional): The policy-specific context data.
 - `idempotency_key` (str, optional): An optional idempotency key for the request.
+- `passport` (dict, optional, keyword-only): Passport object to send in body (local mode).
+- `policy` (PolicyPack, optional, keyword-only): Policy pack to send in body (use path IN_BODY).
+
+#### `async verify_policy_with_passport(passport: Dict[str, Any], policy_id: str, context: Dict[str, Any] = None, idempotency_key: str = None) -> PolicyVerificationResponse`
+Verifies a policy using a passport in the request body (local mode; no registry fetch).
+
+#### `async verify_policy_with_policy_in_body(agent_id_or_passport: Union[str, Dict[str, Any]], policy: PolicyPack, context: Dict[str, Any] = None, idempotency_key: str = None) -> PolicyVerificationResponse`
+Verifies using a policy pack in the request body (pack_id = IN_BODY). Pass either `agent_id` (cloud) or passport dict (local).
 
 #### `async get_decision_token(agent_id: str, policy_id: str, context: Dict[str, Any] = None) -> str`
 Retrieves a short-lived decision token for near-zero latency local validation. Calls `/api/verify/token/:pack_id`.

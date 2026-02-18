@@ -15,7 +15,7 @@ npm install @aporthq/middleware-express
 - **Agent ID Required**: Every policy check needs an agent ID
 - **Two Options**: Pass agent ID as function parameter (preferred) or use `X-Agent-Passport-Id` header
 - **Resolution Priority**: Function parameter > Header > Fail with 401
-- **Registry**: Defaults to `https://aport.io` (configurable)
+- **API base URL**: Defaults to `https://api.aport.io` (configurable via `baseUrl` or `AGENT_PASSPORT_BASE_URL`)
 - **Policies**: Choose from `finance.payment.refund.v1`, `data.export.create.v1`, `messaging.message.send.v1`, `code.repository.merge.v1`
 
 | **Method** | **Agent ID Source** | **Security** | **Use Case** |
@@ -56,7 +56,7 @@ app.post('/api/refunds', (req, res) => {
 ### 2. Route-Specific Policy Enforcement
 
 ```javascript
-const { requirePolicy } = require('@agent-passport/middleware-express');
+const { requirePolicy } = require('@aporthq/middleware-express');
 
 const AGENT_ID = "ap_a2d10232c6534523812423eec8a1425c45678"; // Your agent ID
 
@@ -109,8 +109,11 @@ Global middleware that enforces a specific policy on all routes.
 
 - `options.policyId` (string): Policy ID to enforce (e.g., "finance.payment.refund.v1")
 - `options.failClosed` (boolean): Fail if agent ID missing (default: true)
-- `options.baseUrl` (string): Registry base URL (default: "https://aport.io")
-- `options.timeout` (number): Request timeout in ms (default: 5000)
+- `options.baseUrl` (string): APort API base URL (default: "https://api.aport.io")
+- `options.timeoutMs` (number): Request timeout in ms (default: 5000)
+- `options.skipPaths` (string[]): Path prefixes to skip (default: `["/health", "/metrics", "/status"]`)
+- `options.passportFromBody` (boolean): Use `req.body.passport` when present for local mode (default: true)
+- `options.policyFromBody` (boolean): Use `req.body.policy` when present for pack_id IN_BODY (default: true)
 
 **Returns:** Express middleware function
 
@@ -154,9 +157,10 @@ app.post('/api/refunds', requirePolicy("finance.payment.refund.v1", AGENT_ID), (
   console.log(req.agent.assurance_level); // "L2"
   console.log(req.agent.capabilities);    // ["finance.payment.refund"]
   
-  // req.policyResult - Policy evaluation result
-  console.log(req.policyResult.evaluation.decision_id);
-  console.log(req.policyResult.evaluation.remaining_daily_cap);
+  // req.policyResult - Policy verification result (PolicyVerificationResponse)
+  console.log(req.policyResult.decision_id);
+  console.log(req.policyResult.allow);
+  console.log(req.policyResult.reasons);
 });
 ```
 
@@ -225,7 +229,7 @@ import {
   agentPassportMiddleware, 
   requirePolicy,
   AgentRequest 
-} from '@agent-passport/middleware-express';
+} from '@aporthq/middleware-express';
 
 const app = express();
 
@@ -286,8 +290,8 @@ app.use(agentPassportMiddleware({
 ### Environment Variables
 
 ```bash
-# Registry base URL (optional)
-AGENT_PASSPORT_BASE_URL=https://aport.io
+# APort API base URL (optional)
+AGENT_PASSPORT_BASE_URL=https://api.aport.io
 
 # Default agent ID for development (optional)
 AGENT_PASSPORT_AGENT_ID=ap_a2d10232c6534523812423eec8a1425c45678
@@ -308,7 +312,7 @@ app.use(agentPassportMiddleware({
 
 ```javascript
 const express = require('express');
-const { requirePolicy } = require('@agent-passport/middleware-express');
+const { requirePolicy } = require('@aporthq/middleware-express');
 
 const app = express();
 app.use(express.json());
