@@ -114,12 +114,19 @@ Initializes the APort client.
 - `options.apiKey` (string, optional): Your API Key for authenticated requests.
 - `options.timeoutMs` (number, optional): Request timeout in milliseconds (default: 800ms).
 
-#### `verifyPolicy(agentId: string, policyId: string, context?: Record<string, any>, idempotencyKey?: string): Promise<PolicyVerificationResponse>`
-Verifies a policy against an agent by calling the `/api/verify/policy/:pack_id` endpoint.
+#### `verifyPolicy(agentId: string, policyId: string, context?: Record<string, any>, idempotencyKey?: string, options?: { passport?: PassportData; policy?: PolicyPack }): Promise<PolicyVerificationResponse>`
+Verifies a policy against an agent by calling the `/api/verify/policy/:pack_id` endpoint. Optionally pass `passport` and/or `policy` in the request body (local/dynamic mode).
 - `agentId` (string): The ID of the agent.
 - `policyId` (string): The ID of the policy pack (e.g., `finance.payment.refund.v1`, `code.release.publish.v1`).
 - `context` (Record<string, any>, optional): The policy-specific context data.
 - `idempotencyKey` (string, optional): An optional idempotency key for the request.
+- `options` (object, optional): `{ passport?: PassportData; policy?: PolicyPack }` to send passport/policy in body.
+
+#### `verifyPolicyWithPassport(passport: PassportData, policyId: string, context?: Record<string, any>, idempotencyKey?: string): Promise<PolicyVerificationResponse>`
+Verifies a policy using a passport in the request body (local mode; no registry fetch). Calls `/api/verify/policy/:pack_id` with `body.passport`.
+
+#### `verifyPolicyWithPolicyInBody(agentIdOrPassport: string | PassportData, policy: PolicyPack, context?: Record<string, any>, idempotencyKey?: string): Promise<PolicyVerificationResponse>`
+Verifies using a policy pack in the request body (pack_id = IN_BODY). Pass either `agentId` (cloud) or `PassportData` (local).
 
 #### `getDecisionToken(agentId: string, policyId: string, context?: Record<string, any>): Promise<string>`
 Retrieves a short-lived decision token for near-zero latency local validation. Calls `/api/verify/token/:pack_id`.

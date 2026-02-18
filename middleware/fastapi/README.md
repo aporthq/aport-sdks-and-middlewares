@@ -5,7 +5,7 @@ FastAPI middleware for The Passport for AI Agents verification and policy enforc
 ## Installation
 
 ```bash
-pip install agent-passport-middleware-fastapi
+pip install aporthq-middleware-fastapi
 ```
 
 ## Getting Started
@@ -15,7 +15,7 @@ pip install agent-passport-middleware-fastapi
 - **Agent ID Required**: Every policy check needs an agent ID
 - **Two Options**: Pass agent ID as function parameter (preferred) or use `X-Agent-Passport-Id` header
 - **Resolution Priority**: Function parameter > Header > Fail with 401
-- **Registry**: Defaults to `https://aport.io` (configurable)
+- **API base URL**: Defaults to `https://api.aport.io` (configurable via `base_url` or `AGENT_PASSPORT_BASE_URL`)
 - **Policies**: Choose from `finance.payment.refund.v1`, `data.export.create.v1`, `messaging.message.send.v1`, `code.repository.merge.v1`
 
 | **Method** | **Agent ID Source** | **Security** | **Use Case** |
@@ -29,24 +29,23 @@ pip install agent-passport-middleware-fastapi
 ### 1. Global Policy Enforcement
 
 ```python
-from fastapi import FastAPI
-from aporthq_middleware_fastapi import agent_passport_middleware, AgentPassportMiddlewareOptions
+from fastapi import FastAPI, Request
+from aporthq_middleware_fastapi import AgentPassportMiddleware, AgentPassportMiddlewareOptions
 
 app = FastAPI()
 
 # Enforce specific policy globally
 app.add_middleware(
-    agent_passport_middleware,
+    AgentPassportMiddleware,
     options=AgentPassportMiddlewareOptions(
-        policy_id="finance.payment.refund.v1",  # Enforces refunds policy
-        fail_closed=True
-    )
+        policy_id="finance.payment.refund.v1",
+        fail_closed=True,
+    ),
 )
 
 # All routes now require finance.payment.refund.v1 policy compliance
 @app.post("/api/refunds")
 async def process_refund(request: Request):
-    # Policy already verified - safe to process
     body = await request.json()
     return {"success": True, "agent_id": request.state.agent.agent_id}
 ```
@@ -107,8 +106,11 @@ Global middleware that enforces a specific policy on all routes.
 
 - `options.policy_id` (str): Policy ID to enforce (e.g., "finance.payment.refund.v1")
 - `options.fail_closed` (bool): Fail if agent ID missing (default: True)
-- `options.base_url` (str): Registry base URL (default: "https://aport.io")
-- `options.timeout` (int): Request timeout in seconds (default: 5)
+- `options.base_url` (str): APort API base URL (default: "https://api.aport.io")
+- `options.timeout_ms` (int): Request timeout in milliseconds (default: 5000)
+- `options.skip_paths` (list): Path prefixes to skip (default: `["/health", "/metrics", "/status"]`)
+- `options.passport_from_body` (bool): Use request body passport when present (default: True)
+- `options.policy_from_body` (bool): Use request body policy when present for IN_BODY (default: True)
 
 **Returns:** Middleware instance
 
@@ -153,9 +155,10 @@ async def process_refund(request: Request):
     print(request.state.agent.assurance_level) # "L2"
     print(request.state.agent.capabilities)    # ["finance.payment.refund"]
     
-    # request.state.policy_result - Policy evaluation result
-    print(request.state.policy_result.evaluation.decision_id)
-    print(request.state.policy_result.evaluation.remaining_daily_cap)
+    # request.state.policy_result - Policy verification result (decision_id, allow, reasons)
+    print(request.state.policy_result.decision_id)
+    print(request.state.policy_result.allow)
+    print(request.state.policy_result.reasons)
 ```
 
 ## Available Policies
@@ -219,8 +222,8 @@ The middleware returns appropriate HTTP status codes:
 ### Environment Variables
 
 ```bash
-# Registry base URL (optional)
-AGENT_PASSPORT_BASE_URL=https://aport.io
+# APort API base URL (optional)
+AGENT_PASSPORT_BASE_URL=https://api.aport.io
 
 # Default agent ID for development (optional)
 AGENT_PASSPORT_AGENT_ID=ap_a2d10232c6534523812423eec8a1425c45678
@@ -230,11 +233,11 @@ AGENT_PASSPORT_AGENT_ID=ap_a2d10232c6534523812423eec8a1425c45678
 
 ```python
 app.add_middleware(
-    agent_passport_middleware,
+    AgentPassportMiddleware,
     options=AgentPassportMiddlewareOptions(
         policy_id="finance.payment.refund.v1",
-        skip_paths=["/health", "/metrics", "/status"]
-    )
+        skip_paths=["/health", "/metrics", "/status"],
+    ),
 )
 ```
 

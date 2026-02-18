@@ -158,6 +158,46 @@ describe("APortClient", () => {
       }
     });
 
+    it("should support passport and policy in body via options", async () => {
+      const mockResponse: PolicyVerificationResponse = {
+        decision_id: "dec_body",
+        allow: true,
+        reasons: [],
+        created_at: "2023-01-01T00:00:00Z",
+      };
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Map(),
+        text: () => Promise.resolve(JSON.stringify(mockResponse)),
+      });
+
+      const passport = { agent_id: "ap_local", status: "active" } as any;
+      const result = await client.verifyPolicy(
+        "ap_local",
+        "finance.payment.refund.v1",
+        { amount: 50, currency: "USD" },
+        undefined,
+        { passport }
+      );
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `${TEST_BASE_URL}/api/verify/policy/finance.payment.refund.v1`,
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            context: {
+              agent_id: "ap_local",
+              policy_id: "finance.payment.refund.v1",
+              amount: 50,
+              currency: "USD",
+            },
+            passport,
+          }),
+        })
+      );
+      expect(result).toMatchObject(mockResponse);
+    });
+
     it("should normalize base URL correctly", async () => {
       const baseWithSlash = TEST_BASE_URL.replace(/\/?$/, "/");
       const clientWithTrailingSlash = new APortClient({
