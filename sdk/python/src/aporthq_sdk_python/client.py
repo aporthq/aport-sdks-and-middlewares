@@ -1,24 +1,33 @@
 """
-Production-grade thin Python SDK Client - API calls only
-No policy logic, no Cloudflare imports, no counters
+Production-grade thin Python SDK Client - API calls only.
+Aligns with POST /api/verify/policy/{pack_id}: context (required), passport (optional), policy (optional; required when pack_id is IN_BODY).
 """
 
 import asyncio
 import json
 import time
-from typing import Any, Dict, List, Optional
-from urllib.parse import urljoin
+from typing import Any, Dict, List, Optional, Union
 
 import aiohttp
 from aiohttp import ClientTimeout, ClientError
 
 from .decision_types import (
+    PolicyPack,
+    PolicyVerificationRequestBody,
     PolicyVerificationRequest,
     PolicyVerificationResponse,
     Jwks,
     JwksKey,
 )
 from .errors import AportError
+
+# Default headers for all requests (sent on every request; merged with _get_headers())
+DEFAULT_HEADERS: Dict[str, str] = {
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+    "User-Agent": "aport-sdk-python/0.1.0",
+}
+# Optional headers added by _get_headers(): Authorization (Bearer <api_key>), Idempotency-Key
 
 
 class APortClientOptions:
@@ -54,16 +63,12 @@ class APortClient:
         await self.close()
 
     async def _ensure_session(self):
-        """Ensure HTTP session is created."""
+        """Ensure HTTP session is created with default headers."""
         if self._session is None or self._session.closed:
             timeout = ClientTimeout(total=self.opts.timeout_ms / 1000)
             self._session = aiohttp.ClientSession(
                 timeout=timeout,
-                headers={
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                    "User-Agent": "aport-sdk-python/0.1.0",
-                },
+                headers=DEFAULT_HEADERS,
             )
 
     async def close(self):
@@ -72,15 +77,12 @@ class APortClient:
             await self._session.close()
 
     def _get_headers(self, idempotency_key: Optional[str] = None) -> Dict[str, str]:
-        """Get request headers."""
-        headers = {}
-        
+        """Request headers to merge with session defaults: Authorization, Idempotency-Key."""
+        headers: Dict[str, str] = {}
         if self.opts.api_key:
             headers["Authorization"] = f"Bearer {self.opts.api_key}"
-        
         if idempotency_key:
             headers["Idempotency-Key"] = idempotency_key
-            
         return headers
 
     def _normalize_url(self, path: str) -> str:
@@ -128,7 +130,6 @@ class APortClient:
                 
                 if server_timing:
                     json_data["_meta"] = {"serverTiming": server_timing}
-                
                 return json_data
                 
         except ClientError as e:
@@ -142,31 +143,112 @@ class APortClient:
                 reasons=[{"code": "TIMEOUT", "message": "Request timeout"}],
             )
 
+    def _build_policy_request_body(
+        self,
+        *,
+        agent_id: Optional[str] = None,
+        policy_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        passport: Optional[Dict[str, Any]] = None,
+        policy: Optional[PolicyPack] = None,
+    ) -> Dict[str, Any]:
+        """Build request body for POST /api/verify/policy/{pack_id}. API expects context, optional passport, optional policy."""
+        ctx = dict(context or {})
+        if agent_id is not None:
+            ctx["agent_id"] = agent_id
+        if policy_id is not None:
+            ctx["policy_id"] = policy_id
+        if idempotency_key is not None:
+            ctx["idempotency_key"] = idempotency_key
+        body: Dict[str, Any] = {"context": ctx}
+        if passport is not None:
+            body["passport"] = passport
+        if policy is not None:
+            body["policy"] = policy
+        return body
+
     async def verify_policy(
         self,
         agent_id: str,
         policy_id: str,
-        context: Dict[str, Any] = None,
+        context: Optional[Dict[str, Any]] = None,
         idempotency_key: Optional[str] = None,
+        *,
+        passport: Optional[Dict[str, Any]] = None,
+        policy: Optional[PolicyPack] = None,
     ) -> PolicyVerificationResponse:
-        """Verify a policy against an agent."""
-        if context is None:
-            context = {}
-            
-        request = PolicyVerificationRequest(
+        """Verify a policy against an agent (cloud mode). Optionally pass passport and/or policy in body."""
+        body = self._build_policy_request_body(
             agent_id=agent_id,
+            policy_id=policy_id,
+            idempotency_key=idempotency_key,
             context=context,
+            passport=passport,
+            policy=policy,
+        )
+        path = "/api/verify/policy/IN_BODY" if policy is not None else f"/api/verify/policy/{policy_id}"
+        response_data = await self._make_request(
+            "POST",
+            path,
+            data=body,
             idempotency_key=idempotency_key,
         )
-        
+        return PolicyVerificationResponse.from_api_response(response_data)
+
+    async def verify_policy_with_passport(
+        self,
+        passport: Dict[str, Any],
+        policy_id: str,
+        context: Optional[Dict[str, Any]] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> PolicyVerificationResponse:
+        """Verify a policy using passport in body (local mode; no registry fetch)."""
+        agent_id = passport.get("agent_id")
+        body = self._build_policy_request_body(
+            agent_id=agent_id,
+            policy_id=policy_id,
+            idempotency_key=idempotency_key,
+            context=context or {},
+            passport=passport,
+        )
         response_data = await self._make_request(
             "POST",
             f"/api/verify/policy/{policy_id}",
-            data=request.__dict__,
+            data=body,
             idempotency_key=idempotency_key,
         )
-        
-        return PolicyVerificationResponse(**response_data)
+        return PolicyVerificationResponse.from_api_response(response_data)
+
+    async def verify_policy_with_policy_in_body(
+        self,
+        agent_id_or_passport: Union[str, Dict[str, Any]],
+        policy: PolicyPack,
+        context: Optional[Dict[str, Any]] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> PolicyVerificationResponse:
+        """Verify using policy pack in body (pack_id = IN_BODY). Pass agent_id (cloud) or passport dict (local)."""
+        if isinstance(agent_id_or_passport, dict):
+            passport: Optional[Dict[str, Any]] = agent_id_or_passport
+            agent_id = passport.get("agent_id")
+        else:
+            passport = None
+            agent_id = agent_id_or_passport
+        body = self._build_policy_request_body(
+            agent_id=agent_id,
+            policy_id=policy.get("id") if isinstance(policy, dict) else getattr(policy, "id", None),
+            idempotency_key=idempotency_key,
+            context=context or {},
+            passport=passport,
+            policy=policy,
+        )
+        response_data = await self._make_request(
+            "POST",
+            "/api/verify/policy/IN_BODY",
+            data=body,
+            idempotency_key=idempotency_key,
+        )
+        return PolicyVerificationResponse.from_api_response(response_data)
 
     async def get_decision_token(
         self,
@@ -215,8 +297,7 @@ class APortClient:
             "/api/verify/token/validate",
             data={"token": token},
         )
-        
-        return PolicyVerificationResponse(**response_data["decision"])
+        return PolicyVerificationResponse.from_api_response(response_data)
 
     async def get_passport_view(self, agent_id: str) -> Dict[str, Any]:
         """Get passport verification view (for debugging/about pages)."""

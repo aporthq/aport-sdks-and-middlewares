@@ -11,6 +11,8 @@ from .decision_types import (
     Decision,
     DecisionReason,
     VerificationContext,
+    PolicyPack,
+    PolicyVerificationRequestBody,
     PolicyVerificationRequest,
     PolicyVerificationResponse,
     Jwks,
@@ -20,7 +22,7 @@ from .errors import AportError
 # Backward compatibility - re-export from shared_types
 from .shared_types import PassportData, AgentPassport
 
-__version__ = "0.1.0"
+__version__ = "0.1.3"
 __all__ = [
     # Core SDK
     "APortClient",
@@ -32,6 +34,8 @@ __all__ = [
     "Decision",
     "DecisionReason",
     "VerificationContext",
+    "PolicyPack",
+    "PolicyVerificationRequestBody",
     "PolicyVerificationRequest",
     "PolicyVerificationResponse",
     "Jwks",

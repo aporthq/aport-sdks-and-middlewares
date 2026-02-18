@@ -16,7 +16,10 @@ import {
   afterEach,
 } from "@jest/globals";
 
-// Mock global fetch
+// Use local dev server unless in CI/prod (set in test-setup.ts)
+const TEST_BASE_URL =
+  process.env.AGENT_PASSPORT_BASE_URL || "https://api.aport.io";
+
 const mockFetch = jest.fn() as jest.MockedFunction<typeof fetch>;
 global.fetch = mockFetch as any;
 
@@ -65,7 +68,7 @@ describe("agentPassportMiddleware", () => {
       agent_id: "ap_a2d10232c6534523812423eec8a1425c4567890abcdef",
     });
     expect(mockFetch).toHaveBeenCalledWith(
-      "https://api.aport.io/api/passports/ap_a2d10232c6534523812423eec8a1425c4567890abcdef/verify_view",
+      `${TEST_BASE_URL}/api/passports/ap_a2d10232c6534523812423eec8a1425c4567890abcdef/verify_view`,
       expect.any(Object)
     );
   });
@@ -131,12 +134,16 @@ describe("agentPassportMiddleware", () => {
     expect(response.body.agent.agent_id).toBe("ap_test123");
     expect(response.body.policyResult.allow).toBe(true);
     expect(mockFetch).toHaveBeenCalledWith(
-      "https://api.aport.io/api/verify/policy/finance.payment.refund.v1",
+      `${TEST_BASE_URL}/api/verify/policy/finance.payment.refund.v1`,
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
-          agent_id: "ap_test123",
-          context: { amount: 100, currency: "USD" },
+          context: {
+            agent_id: "ap_test123",
+            policy_id: "finance.payment.refund.v1",
+            amount: 100,
+            currency: "USD",
+          },
         }),
       })
     );

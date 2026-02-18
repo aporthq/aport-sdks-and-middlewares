@@ -3,11 +3,40 @@
  * These types are used by both the SDK and the API endpoints
  */
 
-// Canonical request/response shapes for production-grade API
+import type { PassportData } from "./passport";
+
+/** Minimal OAP policy pack shape when supplying policy in body (pack_id = IN_BODY). */
+export interface PolicyPack {
+  id: string;
+  requires_capabilities: string[];
+  [key: string]: any;
+}
+
+/**
+ * Request body for POST /api/verify/policy/{pack_id}.
+ * - context is required and must contain agent_id (or provide passport for local mode).
+ * - When pack_id is IN_BODY, policy is required.
+ */
+export interface PolicyVerificationRequestBody {
+  context: {
+    agent_id?: string;
+    policy_id?: string;
+    idempotency_key?: string;
+    [key: string]: any;
+  };
+  passport?: PassportData;
+  policy?: PolicyPack;
+}
+
+/** Convenience shape: agent_id + context. SDK builds body.context from this. */
 export interface PolicyVerificationRequest {
-  agent_id: string; // instance or template id
-  idempotency_key?: string; // also sent as header; see below
-  context: Record<string, any>; // policy-specific fields
+  agent_id: string;
+  idempotency_key?: string;
+  context: Record<string, any>;
+  /** Passport in body (local mode). When set, agent_id can be omitted from context. */
+  passport?: PassportData;
+  /** Policy pack in body (use pack_id IN_BODY). When set, path is /api/verify/policy/IN_BODY. */
+  policy?: PolicyPack;
 }
 
 export interface PolicyVerificationResponse {

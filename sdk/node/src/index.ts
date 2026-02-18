@@ -18,7 +18,9 @@ export type {
   DecisionReason,
   VerificationContext,
   PolicyVerificationRequest,
+  PolicyVerificationRequestBody,
   PolicyVerificationResponse,
+  PolicyPack,
   Jwks,
 } from "./types/decision";
 

@@ -39,6 +39,10 @@ export interface AgentPassportMiddlewareOptions {
   failClosed?: boolean;
   skipPaths?: string[];
   policyId?: string;
+  /** Use req.body.passport when present (local mode). Default true. */
+  passportFromBody?: boolean;
+  /** Use req.body.policy when present (pack_id IN_BODY). Default true. */
+  policyFromBody?: boolean;
 }
 
 export interface PolicyMiddlewareOptions {
@@ -55,6 +59,8 @@ const DEFAULT_OPTIONS = {
   failClosed: true,
   skipPaths: ["/health", "/metrics", "/status"],
   policyId: "",
+  passportFromBody: true,
+  policyFromBody: true,
 };
 
 /**
@@ -73,16 +79,19 @@ function createClient(
 }
 
 /**
- * Extract agent ID from request headers or function parameter
+ * Extract agent ID from request headers, body.passport, or function parameter
  */
 function extractAgentId(
   request: Request,
-  providedAgentId?: string
+  providedAgentId?: string,
+  passportFromBody = true
 ): string | null {
   if (providedAgentId) {
     return providedAgentId;
   }
-
+  if (passportFromBody && request.body?.passport?.agent_id) {
+    return request.body.passport.agent_id as string;
+  }
   return (
     (request.headers["x-agent-passport-id"] as string) ||
     (request.headers["x-agent-id"] as string) ||
@@ -126,7 +135,6 @@ export function agentPassportMiddleware(
     apiKey: opts.apiKey,
     timeoutMs: opts.timeoutMs,
   });
-  const verifier = new PolicyVerifier(client);
 
   return async (req: AgentRequest, res: Response, next: NextFunction) => {
     try {
@@ -135,26 +143,37 @@ export function agentPassportMiddleware(
         return next();
       }
 
-      // Extract agent ID
-      const agentId = extractAgentId(req);
-      if (!agentId) {
+      const usePassportFromBody = opts.passportFromBody !== false;
+      const usePolicyFromBody = opts.policyFromBody !== false;
+      const bodyPassport = usePassportFromBody ? req.body?.passport : undefined;
+      const bodyPolicy = usePolicyFromBody ? req.body?.policy : undefined;
+
+      // Extract agent ID (header or body.passport)
+      const agentId = extractAgentId(req, undefined, usePassportFromBody);
+      if (!agentId && !bodyPassport) {
         if (opts.failClosed) {
           return createErrorResponse(
             res,
             401,
             "missing_agent_id",
-            "Agent ID is required. Provide it as X-Agent-Passport-Id header."
+            "Agent ID is required. Provide X-Agent-Passport-Id header or body.passport."
           );
         }
         return next();
       }
 
-      // If no policy ID specified, just verify agent exists
-      if (!opts.policyId) {
+      const effectiveAgentId = agentId ?? bodyPassport?.agent_id;
+
+      // If no policy ID and no policy in body, just verify agent exists (or use passport from body)
+      if (!opts.policyId && !bodyPolicy) {
+        if (bodyPassport) {
+          req.agent = { agent_id: bodyPassport.agent_id, ...bodyPassport };
+          return next();
+        }
         try {
-          const passportView = await client.getPassportView(agentId);
+          const passportView = await client.getPassportView(effectiveAgentId!);
           req.agent = {
-            agent_id: agentId,
+            agent_id: effectiveAgentId!,
             ...passportView,
           };
           return next();
@@ -165,20 +184,45 @@ export function agentPassportMiddleware(
               error.status,
               "agent_verification_failed",
               error.message,
-              { agent_id: agentId }
+              { agent_id: effectiveAgentId }
             );
           }
           throw error;
         }
       }
 
-      // Verify policy using the client directly
-      const context = req.body || {};
-      const decision = await client.verifyPolicy(
-        agentId,
-        opts.policyId,
-        context
-      );
+      // Build context from body (exclude passport and policy so they are not duplicated)
+      const context =
+        typeof req.body === "object" && req.body !== null
+          ? { ...req.body }
+          : {};
+      delete context.passport;
+      delete context.policy;
+
+      let decision;
+      if (bodyPolicy) {
+        // Policy in body: use IN_BODY; agent from passport or header
+        const agentIdOrPassport = bodyPassport ?? effectiveAgentId!;
+        decision = await client.verifyPolicyWithPolicyInBody(
+          agentIdOrPassport,
+          bodyPolicy,
+          context
+        );
+      } else if (bodyPassport) {
+        // Passport in body (local mode)
+        decision = await client.verifyPolicyWithPassport(
+          bodyPassport,
+          opts.policyId!,
+          context
+        );
+      } else {
+        // Cloud mode: agent_id only
+        decision = await client.verifyPolicy(
+          effectiveAgentId!,
+          opts.policyId!,
+          context
+        );
+      }
 
       if (!decision.allow) {
         return createErrorResponse(
@@ -187,18 +231,15 @@ export function agentPassportMiddleware(
           "policy_violation",
           "Policy violation",
           {
-            agent_id: agentId,
-            policy_id: opts.policyId,
+            agent_id: effectiveAgentId,
+            policy_id: opts.policyId ?? bodyPolicy?.id,
             decision_id: decision.decision_id,
             reasons: decision.reasons,
           }
         );
       }
 
-      // Add agent and policy data to request
-      req.agent = {
-        agent_id: agentId,
-      };
+      req.agent = { agent_id: effectiveAgentId! };
       req.policyResult = decision;
 
       next();
@@ -225,7 +266,8 @@ export function agentPassportMiddleware(
 }
 
 /**
- * Route-specific middleware that enforces a specific policy
+ * Route-specific middleware that enforces a specific policy.
+ * Supports body.passport (local mode) and body.policy (IN_BODY) when present.
  */
 export function requirePolicy(policyId: string, agentId?: string) {
   const client = new APortClient({
@@ -233,28 +275,49 @@ export function requirePolicy(policyId: string, agentId?: string) {
     apiKey: process.env.AGENT_PASSPORT_API_KEY || undefined,
     timeoutMs: 5000,
   });
-  const verifier = new PolicyVerifier(client);
 
   return async (req: AgentRequest, res: Response, next: NextFunction) => {
     try {
-      // Extract agent ID
-      const extractedAgentId = extractAgentId(req, agentId);
-      if (!extractedAgentId) {
+      const bodyPassport = req.body?.passport;
+      const bodyPolicy = req.body?.policy;
+      const extractedAgentId = extractAgentId(req, agentId, true);
+      if (!extractedAgentId && !bodyPassport) {
         return createErrorResponse(
           res,
           401,
           "missing_agent_id",
-          "Agent ID is required. Provide it as X-Agent-Passport-Id header or function parameter."
+          "Agent ID is required. Provide X-Agent-Passport-Id header, function parameter, or body.passport."
         );
       }
 
-      // Verify policy using the client directly
-      const context = req.body || {};
-      const decision = await client.verifyPolicy(
-        extractedAgentId,
-        policyId,
-        context
-      );
+      const context =
+        typeof req.body === "object" && req.body !== null
+          ? { ...req.body }
+          : {};
+      delete context.passport;
+      delete context.policy;
+
+      let decision;
+      if (bodyPolicy) {
+        const agentIdOrPassport = bodyPassport ?? extractedAgentId!;
+        decision = await client.verifyPolicyWithPolicyInBody(
+          agentIdOrPassport,
+          bodyPolicy,
+          context
+        );
+      } else if (bodyPassport) {
+        decision = await client.verifyPolicyWithPassport(
+          bodyPassport,
+          policyId,
+          context
+        );
+      } else {
+        decision = await client.verifyPolicy(
+          extractedAgentId!,
+          policyId,
+          context
+        );
+      }
 
       if (!decision.allow) {
         return createErrorResponse(
@@ -263,7 +326,7 @@ export function requirePolicy(policyId: string, agentId?: string) {
           "policy_violation",
           "Policy violation",
           {
-            agent_id: extractedAgentId,
+            agent_id: extractedAgentId ?? bodyPassport?.agent_id,
             policy_id: policyId,
             decision_id: decision.decision_id,
             reasons: decision.reasons,
@@ -271,9 +334,8 @@ export function requirePolicy(policyId: string, agentId?: string) {
         );
       }
 
-      // Add agent and policy data to request
       req.agent = {
-        agent_id: extractedAgentId,
+        agent_id: extractedAgentId ?? bodyPassport!.agent_id,
       };
       req.policyResult = decision;
 
@@ -301,7 +363,8 @@ export function requirePolicy(policyId: string, agentId?: string) {
 }
 
 /**
- * Route-specific middleware with custom context
+ * Route-specific middleware with custom context.
+ * Supports body.passport (local mode) and body.policy (IN_BODY) when present.
  */
 export function requirePolicyWithContext(
   policyId: string,
@@ -313,30 +376,50 @@ export function requirePolicyWithContext(
     apiKey: process.env.AGENT_PASSPORT_API_KEY || undefined,
     timeoutMs: 5000,
   });
-  const verifier = new PolicyVerifier(client);
 
   return async (req: AgentRequest, res: Response, next: NextFunction) => {
     try {
-      // Extract agent ID
-      const extractedAgentId = extractAgentId(req, agentId);
-      if (!extractedAgentId) {
+      const bodyPassport = req.body?.passport;
+      const bodyPolicy = req.body?.policy;
+      const extractedAgentId = extractAgentId(req, agentId, true);
+      if (!extractedAgentId && !bodyPassport) {
         return createErrorResponse(
           res,
           401,
           "missing_agent_id",
-          "Agent ID is required. Provide it as X-Agent-Passport-Id header or function parameter."
+          "Agent ID is required. Provide X-Agent-Passport-Id header, function parameter, or body.passport."
         );
       }
 
-      // Merge request body with custom context
-      const mergedContext = { ...req.body, ...context };
+      const bodyContext =
+        typeof req.body === "object" && req.body !== null
+          ? { ...req.body }
+          : {};
+      delete bodyContext.passport;
+      delete bodyContext.policy;
+      const mergedContext = { ...bodyContext, ...context };
 
-      // Verify policy using the client directly
-      const decision = await client.verifyPolicy(
-        extractedAgentId,
-        policyId,
-        mergedContext
-      );
+      let decision;
+      if (bodyPolicy) {
+        const agentIdOrPassport = bodyPassport ?? extractedAgentId!;
+        decision = await client.verifyPolicyWithPolicyInBody(
+          agentIdOrPassport,
+          bodyPolicy,
+          mergedContext
+        );
+      } else if (bodyPassport) {
+        decision = await client.verifyPolicyWithPassport(
+          bodyPassport,
+          policyId,
+          mergedContext
+        );
+      } else {
+        decision = await client.verifyPolicy(
+          extractedAgentId!,
+          policyId,
+          mergedContext
+        );
+      }
 
       if (!decision.allow) {
         return createErrorResponse(
@@ -345,7 +428,7 @@ export function requirePolicyWithContext(
           "policy_violation",
           "Policy violation",
           {
-            agent_id: extractedAgentId,
+            agent_id: extractedAgentId ?? bodyPassport?.agent_id,
             policy_id: policyId,
             decision_id: decision.decision_id,
             reasons: decision.reasons,
@@ -353,9 +436,8 @@ export function requirePolicyWithContext(
         );
       }
 
-      // Add agent and policy data to request
       req.agent = {
-        agent_id: extractedAgentId,
+        agent_id: extractedAgentId ?? bodyPassport!.agent_id,
       };
       req.policyResult = decision;
 
@@ -519,6 +601,8 @@ export function verifyRepository(
 export { AportError } from "@aporthq/sdk-node";
 export type {
   PolicyVerificationResponse,
+  PolicyVerificationRequestBody,
+  PolicyPack,
   APortClientOptions,
   Jwks,
   Decision,

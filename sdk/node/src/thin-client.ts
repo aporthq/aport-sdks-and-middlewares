@@ -3,9 +3,12 @@
  * No policy logic, no Cloudflare imports, no counters
  */
 
+import type { PassportData } from "./types/passport";
 import {
   PolicyVerificationRequest,
+  PolicyVerificationRequestBody,
   PolicyVerificationResponse,
+  PolicyPack,
   Jwks,
 } from "./types/decision";
 import { AportError } from "./errors";
@@ -33,21 +36,108 @@ export class APortClient {
   }
 
   /**
-   * Verify a policy against an agent
+   * Verify a policy against an agent (cloud mode: passport fetched by registry).
+   * Optionally pass passport and/or policy in body for local/dynamic evaluation.
    */
   async verifyPolicy(
     agentId: string,
     policyId: string,
     context: Record<string, any> = {},
-    idempotencyKey?: string
+    idempotencyKey?: string,
+    options?: { passport?: PassportData; policy?: PolicyPack }
   ): Promise<PolicyVerificationResponse> {
-    const request: PolicyVerificationRequest = {
+    const body = this.buildPolicyRequestBody({
       agent_id: agentId,
+      policy_id: policyId,
       context,
       idempotency_key: idempotencyKey,
-    };
+      passport: options?.passport,
+      policy: options?.policy,
+    });
+    const path =
+      options?.policy != null
+        ? "/api/verify/policy/IN_BODY"
+        : `/api/verify/policy/${policyId}`;
+    const res = await this.post(path, body, idempotencyKey);
+    return (res.decision != null ? res.decision : res) as PolicyVerificationResponse;
+  }
 
-    return this.post(`/api/verify/policy/${policyId}`, request, idempotencyKey);
+  /**
+   * Verify a policy using a passport in body (local mode; no registry fetch).
+   */
+  async verifyPolicyWithPassport(
+    passport: PassportData,
+    policyId: string,
+    context: Record<string, any> = {},
+    idempotencyKey?: string
+  ): Promise<PolicyVerificationResponse> {
+    const body = this.buildPolicyRequestBody({
+      agent_id: passport.agent_id,
+      policy_id: policyId,
+      idempotency_key: idempotencyKey,
+      context,
+      passport,
+    });
+    const res = await this.post(`/api/verify/policy/${policyId}`, body, idempotencyKey);
+    return (res.decision != null ? res.decision : res) as PolicyVerificationResponse;
+  }
+
+  /**
+   * Verify using a policy pack in body (pack_id = IN_BODY). Pass either agent_id (cloud) or passport (local).
+   */
+  async verifyPolicyWithPolicyInBody(
+    agentIdOrPassport: string | PassportData,
+    policy: PolicyPack,
+    context: Record<string, any> = {},
+    idempotencyKey?: string
+  ): Promise<PolicyVerificationResponse> {
+    const isPassport =
+      typeof agentIdOrPassport === "object" &&
+      agentIdOrPassport !== null &&
+      "agent_id" in agentIdOrPassport;
+    const passport = isPassport ? (agentIdOrPassport as PassportData) : undefined;
+    const agentId = isPassport
+      ? (agentIdOrPassport as PassportData).agent_id
+      : (agentIdOrPassport as string);
+    const body = this.buildPolicyRequestBody({
+      agent_id: agentId,
+      policy_id: policy.id,
+      idempotency_key: idempotencyKey,
+      context,
+      passport,
+      policy,
+    });
+    const res = await this.post("/api/verify/policy/IN_BODY", body, idempotencyKey);
+    return (res.decision != null ? res.decision : res) as PolicyVerificationResponse;
+  }
+
+  /** Build request body for /api/verify/policy/{pack_id}. */
+  private buildPolicyRequestBody(opts: {
+    agent_id?: string;
+    policy_id?: string;
+    idempotency_key?: string;
+    context: Record<string, any>;
+    passport?: PassportData;
+    policy?: PolicyPack;
+  }): PolicyVerificationRequestBody {
+    const {
+      agent_id,
+      policy_id,
+      idempotency_key,
+      context: contextFields,
+      passport,
+      policy,
+    } = opts;
+    const context = {
+      ...(agent_id != null && { agent_id }),
+      ...(policy_id != null && { policy_id }),
+      ...(idempotency_key != null && { idempotency_key }),
+      ...contextFields,
+    };
+    const body: PolicyVerificationRequestBody = { context };
+    if (passport) body.passport = passport;
+    if (policy) body.policy = policy;
+    return body;
   }
 
   /**
