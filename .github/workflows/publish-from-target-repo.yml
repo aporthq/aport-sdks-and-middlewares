@@ -230,7 +230,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd sdk/python
-          pip install build twine pytest requests tomli
+          pip install build twine pytest requests tomli pytest-asyncio
 
       - name: Validate package structure
         run: |
@@ -402,16 +402,23 @@ jobs:
           rm -rf dist/
           echo "✅ Cleaned Express middleware build artifacts"
 
+      - name: Build SDK (so middleware compiles against same code being published)
+        run: |
+          cd sdk/node
+          npm ci
+          npm run build
+          echo "✅ SDK built"
+
       - name: Install dependencies
         run: |
           cd middleware/express
           npm install
 
-      - name: Install published SDK (same version as this release)
+      - name: Install local SDK (use built SDK from this run so types match)
         run: |
           cd middleware/express
-          npm install @aporthq/sdk-node@$VERSION
-          echo "✅ Using @aporthq/sdk-node@$VERSION from npm"
+          npm install ../sdk/node
+          echo "✅ Using local built @aporthq/sdk-node for build"
 
       - name: Build
         run: |
