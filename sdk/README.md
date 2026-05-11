@@ -14,6 +14,11 @@ This directory contains SDKs and middleware for integrating with The Passport fo
 - **Location**: `./python/`
 - **Description**: Python thin client for policy verification and passport views (async aiohttp)
 
+### Go SDK
+- **Package**: `github.com/aporthq/aport-sdks-and-middlewares/sdk/go`
+- **Location**: `./go/`
+- **Description**: Go thin client for policy verification, passport views, decision tokens, and JWKS
+
 ### Express.js Middleware
 - **Package**: `@aporthq/middleware-express`
 - **Location**: `../middleware/express/`
@@ -23,6 +28,11 @@ This directory contains SDKs and middleware for integrating with The Passport fo
 - **Package**: `aporthq-middleware-fastapi`
 - **Location**: `../middleware/fastapi/`
 - **Description**: FastAPI middleware for agent verification and policy enforcement
+
+### Go Middleware
+- **Packages**: `middleware/gin`, `middleware/echo`, `middleware/fiber`
+- **Location**: `./go/middleware/`
+- **Description**: Go middleware for Gin, Echo, and Fiber policy enforcement
 
 ## 🚀 Quick Start
 
@@ -76,6 +86,40 @@ async def main():
 asyncio.run(main())
 ```
 
+### Go
+
+```bash
+go get github.com/aporthq/aport-sdks-and-middlewares/sdk/go
+```
+
+```go
+package main
+
+import (
+	"context"
+	"log"
+
+	aport "github.com/aporthq/aport-sdks-and-middlewares/sdk/go"
+)
+
+func main() {
+	client := aport.NewClient(aport.Options{APIKey: "your-api-key"})
+	decision, err := client.VerifyPolicy(
+		context.Background(),
+		"your-agent-id",
+		"finance.payment.refund.v1",
+		map[string]any{"amount": 1000, "currency": "USD", "order_id": "order_123"},
+		"refund-order-123",
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if decision.Allow {
+		log.Println("Allowed:", decision.DecisionID)
+	}
+}
+```
+
 ### Express.js Middleware
 
 ```bash
@@ -114,6 +158,17 @@ app.add_middleware(
 @app.post("/api/refunds")
 async def get_data(request: Request):
     return {"agent_id": request.state.agent.agent_id}
+```
+
+### Gin Middleware
+
+```bash
+go get github.com/aporthq/aport-sdks-and-middlewares/sdk/go/middleware/gin
+```
+
+```go
+router := gin.Default()
+router.Use(ginaport.RequireRefundPolicy(ginaport.Options{APIKey: "your-api-key"}))
 ```
 
 ## Supported Policies
@@ -216,6 +271,11 @@ npm test
 cd python/
 pip install -e ".[dev]"
 pytest
+
+# Go SDK
+cd go/
+go mod tidy
+go test ./...
 ```
 
 ### Building Middleware
@@ -231,6 +291,10 @@ npm test
 cd ../middleware/fastapi/
 pip install -e ".[dev]"
 pytest
+
+# Go Middleware
+cd ../../sdk/go/
+go test ./middleware/...
 ```
 
 ## 📚 Documentation
@@ -238,6 +302,7 @@ pytest
 - [Transport Profile Specification](../spec/transport-profile.md) - Complete transport specification
 - [Node.js SDK Documentation](./node/README.md) - Node.js SDK documentation
 - [Python SDK Documentation](./python/README.md) - Python SDK documentation
+- [Go SDK Documentation](./go/README.md) - Go SDK and middleware documentation
 - [Express.js Middleware Documentation](../middleware/express/README.md) - Express.js middleware documentation
 - [FastAPI Middleware Documentation](../middleware/fastapi/README.md) - FastAPI middleware documentation
 
