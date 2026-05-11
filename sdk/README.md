@@ -14,6 +14,11 @@ This directory contains SDKs and middleware for integrating with The Passport fo
 - **Location**: `./python/`
 - **Description**: Python thin client for policy verification and passport views (async aiohttp)
 
+### Ruby SDK
+- **Package**: `aporthq-sdk-ruby`
+- **Location**: `./ruby/`
+- **Description**: Ruby thin client for policy verification with Rack/Rails middleware, helpers, and generator
+
 ### Express.js Middleware
 - **Package**: `@aporthq/middleware-express`
 - **Location**: `../middleware/express/`
@@ -76,6 +81,25 @@ async def main():
 asyncio.run(main())
 ```
 
+### Ruby
+
+```bash
+gem install aporthq-sdk-ruby
+```
+
+```ruby
+require "aport/sdk"
+
+client = APort::SDK::Client.new(api_key: ENV["AGENT_PASSPORT_API_KEY"])
+decision = client.verify_policy(
+  agent_id: "your-agent-id",
+  policy_id: "finance.payment.refund.v1",
+  context: { amount: 1000, currency: "USD", order_id: "order_123" },
+  idempotency_key: "refund-order-123"
+)
+puts "Allowed: #{decision["decision_id"]}" if decision["allow"]
+```
+
 ### Express.js Middleware
 
 ```bash
@@ -114,6 +138,15 @@ app.add_middleware(
 @app.post("/api/refunds")
 async def get_data(request: Request):
     return {"agent_id": request.state.agent.agent_id}
+```
+
+### Rails Middleware
+
+```ruby
+Rails.application.config.middleware.use(
+  APort::SDK::Middleware,
+  policy_id: "finance.payment.refund.v1"
+)
 ```
 
 ## Supported Policies
@@ -216,6 +249,10 @@ npm test
 cd python/
 pip install -e ".[dev]"
 pytest
+
+# Ruby SDK
+cd ruby/
+bundle exec rake test
 ```
 
 ### Building Middleware
@@ -238,6 +275,7 @@ pytest
 - [Transport Profile Specification](../spec/transport-profile.md) - Complete transport specification
 - [Node.js SDK Documentation](./node/README.md) - Node.js SDK documentation
 - [Python SDK Documentation](./python/README.md) - Python SDK documentation
+- [Ruby SDK Documentation](./ruby/README.md) - Ruby SDK and Rails middleware documentation
 - [Express.js Middleware Documentation](../middleware/express/README.md) - Express.js middleware documentation
 - [FastAPI Middleware Documentation](../middleware/fastapi/README.md) - FastAPI middleware documentation
 

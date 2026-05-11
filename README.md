@@ -12,19 +12,29 @@ Official SDKs and middleware for The Passport for AI Agents.
 - **SDK**: [aporthq-sdk-python](sdk/python/) - Core Python SDK  
 - **Middleware**: [agent-passport-middleware-fastapi](middleware/fastapi/) - FastAPI middleware
 
+### Ruby
+- **SDK**: [aporthq-sdk-ruby](sdk/ruby/) - Core Ruby SDK
+- **Middleware**: [Rack/Rails middleware](sdk/ruby/) - Rails verification middleware and helpers
+
 ## Quick Start
 
 ### Node.js
-\`\`\`bash
+```bash
 npm install @aporthq/sdk-node
 npm install @aporthq/middleware-express
-\`\`\`
+```
 
 ### Python
-\`\`\`bash
+```bash
 pip install aporthq-sdk-python
 pip install agent-passport-middleware-fastapi
-\`\`\`
+```
+
+### Ruby
+```bash
+gem install aporthq-sdk-ruby
+bin/rails generate aport:install
+```
 
 ## Documentation
 
