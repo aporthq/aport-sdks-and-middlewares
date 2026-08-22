@@ -25,7 +25,7 @@ from .errors import AportError
 DEFAULT_HEADERS: Dict[str, str] = {
     "Content-Type": "application/json",
     "Accept": "application/json",
-    "User-Agent": "aport-sdk-python/0.1.0",
+    "User-Agent": "aport-sdk-python/0.1.6",
 }
 # Optional headers added by _get_headers(): Authorization (Bearer <api_key>), Idempotency-Key
 

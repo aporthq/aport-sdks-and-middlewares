@@ -10,7 +10,7 @@
     "dev:ts": "nodemon --exec ts-node typescript-example.ts"
   },
   "dependencies": {
-    "@agent-passport/middleware-express": "file:../",
+    "@aporthq/middleware-express": "file:../",
     "express": "^4.18.2"
   },
   "devDependencies": {

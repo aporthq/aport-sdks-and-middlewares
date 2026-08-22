@@ -15,6 +15,8 @@ from aporthq_middleware_fastapi import (
     AgentPassportMiddlewareOptions,
 )
 from aporthq_sdk_python import AgentPassport, AportError
+from aporthq_sdk_python.decision_types import PolicyVerificationResponse
+from aporthq_middleware_fastapi.middleware import _response_to_dict
 
 
 class TestAgentPassportMiddleware:
@@ -176,6 +178,27 @@ class TestAgentPassportMiddleware:
             
             assert response.status_code == 403
             assert response.json()["error"] == "policy_violation"
+
+    def test_response_to_dict_preserves_decision_metadata(self):
+        """Decision helpers should not discard verification evidence fields."""
+        response = PolicyVerificationResponse(
+            decision_id="dec_123",
+            allow=True,
+            reasons=[],
+            provenance="ci_time",
+            policy_hash="sha256:abc",
+            github={"repository": "aporthq/agent-passport"},
+            signature_status={"signature_valid": True},
+        )
+
+        result = _response_to_dict(response)
+
+        assert result["decision_id"] == "dec_123"
+        assert result["allow"] is True
+        assert result["provenance"] == "ci_time"
+        assert result["policy_hash"] == "sha256:abc"
+        assert result["github"]["repository"] == "aporthq/agent-passport"
+        assert result["signature_status"]["signature_valid"] is True
 
 
 class TestRequirePolicy:

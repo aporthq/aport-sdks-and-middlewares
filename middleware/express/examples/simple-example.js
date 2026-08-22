@@ -229,4 +229,4 @@ KEY PATTERNS:
    app.post("/api/pr", requirePolicyWithContext("code.repository.merge.v1", context, AGENT_ID), handler);
 
 THAT'S IT! Simple, clear, and powerful policy enforcement.
-*/
+*/;

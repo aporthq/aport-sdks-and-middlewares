@@ -52,6 +52,28 @@ export interface PolicyVerificationResponse {
   passport_digest?: string;
   signature?: string; // HMAC/JWT
   created_at?: string;
+  issued_at?: string;
+  expires_at?: string;
+  provenance?: "pre_action" | "ci_time" | "unattributed" | "reconciliation";
+  outcome?: "allow" | "allow_with_warning" | "require_review" | "deny";
+  policy_hash?: string;
+  policy_version?: string;
+  github?: {
+    repository?: string;
+    head_sha?: string;
+    actor?: string;
+    action?: string;
+    workflow_ref?: string;
+    job_workflow_ref?: string;
+    host?: string;
+  };
+  signature_status?: {
+    signature_valid?: boolean;
+    integrity_valid?: boolean;
+    verified_at?: string;
+  };
+  signature_valid?: boolean;
+  integrity_valid?: boolean;
   _meta?: {
     serverTiming?: string;
   };

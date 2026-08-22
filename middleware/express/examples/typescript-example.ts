@@ -10,7 +10,7 @@ import {
   requirePolicy,
   requirePolicyWithContext,
   AgentRequest,
-} from "@agent-passport/middleware-express";
+} from "@aporthq/middleware-express";
 
 const app = express();
 app.use(express.json());
@@ -271,4 +271,4 @@ USAGE:
 4. Get compile-time validation of agent data structure
 
 THAT'S IT! Type-safe policy enforcement with full IDE support.
-*/
+*/;
