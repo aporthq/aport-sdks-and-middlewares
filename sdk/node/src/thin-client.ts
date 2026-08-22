@@ -241,7 +241,7 @@ export class APortClient {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       Accept: "application/json",
-      "User-Agent": "aport-sdk-js/0.1.0",
+      "User-Agent": "aport-sdk-js/0.1.6",
     };
 
     if (this.opts.apiKey) {

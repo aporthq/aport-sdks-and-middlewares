@@ -417,7 +417,7 @@ jobs:
       - name: Install local SDK (use built SDK from this run so types match)
         run: |
           cd middleware/express
-          npm install ../sdk/node
+          npm install ../../sdk/node --no-save
           echo "✅ Using local built @aporthq/sdk-node for build"
 
       - name: Build
@@ -447,6 +447,7 @@ jobs:
         if: env.SKIP_PUBLISH != 'true'
         run: |
           cd middleware/express
+          npm pkg set "dependencies.@aporthq/sdk-node=^$VERSION"
           npm publish
 
       - name: Verify publication

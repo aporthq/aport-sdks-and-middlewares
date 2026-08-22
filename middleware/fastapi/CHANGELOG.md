@@ -4,6 +4,16 @@ All notable changes to the FastAPI middleware will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.1.6] - 2026-08-21
+
+### Fixed
+- Align package metadata and Python SDK dependency floor with the shared SDK and middleware release.
+
+## [0.1.5] - 2026-08-21
+
+### Fixed
+- Preserve full policy verification response fields in convenience helpers.
+
 ## [0.1.4] - 2026-03-13
 
 ### Added
