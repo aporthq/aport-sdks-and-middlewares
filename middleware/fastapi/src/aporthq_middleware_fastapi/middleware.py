@@ -660,14 +660,24 @@ def _response_to_dict(resp: Union[PolicyVerificationResponse, Dict[str, Any]]) -
     """Convert PolicyVerificationResponse to dict for API compatibility."""
     if isinstance(resp, dict):
         return resp
-    return {
-        "decision_id": getattr(resp, "decision_id", None),
-        "allow": getattr(resp, "allow", False),
-        "reasons": getattr(resp, "reasons", None) or [],
-        "assurance_level": getattr(resp, "assurance_level", None),
-        "expires_in": getattr(resp, "expires_in", None),
-        "created_at": getattr(resp, "created_at", None),
-    }
+
+    fields = getattr(resp, "__dataclass_fields__", {}) or {}
+    if fields:
+        result = {
+            field: getattr(resp, field)
+            for field in fields
+            if getattr(resp, field, None) is not None
+        }
+    else:
+        result = {}
+
+    result["decision_id"] = getattr(resp, "decision_id", result.get("decision_id", None))
+    result["allow"] = getattr(resp, "allow", result.get("allow", False))
+    result["reasons"] = getattr(resp, "reasons", result.get("reasons", None)) or []
+    result.setdefault("assurance_level", getattr(resp, "assurance_level", None))
+    result.setdefault("expires_in", getattr(resp, "expires_in", None))
+    result.setdefault("created_at", getattr(resp, "created_at", None))
+    return result
 
 
 # Direct policy verification using PolicyVerifier (async; await required)

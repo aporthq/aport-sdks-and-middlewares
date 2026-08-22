@@ -45,6 +45,16 @@ class PolicyVerificationResponse:
     passport_digest: Optional[str] = None
     signature: Optional[str] = None  # HMAC/JWT
     created_at: Optional[str] = None
+    issued_at: Optional[str] = None
+    expires_at: Optional[str] = None
+    provenance: Optional[str] = None  # pre_action | ci_time | unattributed | reconciliation
+    outcome: Optional[str] = None  # allow | allow_with_warning | require_review | deny
+    policy_hash: Optional[str] = None
+    policy_version: Optional[str] = None
+    github: Optional[Dict[str, Any]] = None
+    signature_status: Optional[Dict[str, Any]] = None
+    signature_valid: Optional[bool] = None
+    integrity_valid: Optional[bool] = None
     _meta: Optional[Dict[str, Any]] = None  # Server-Timing, etc.
 
     @classmethod

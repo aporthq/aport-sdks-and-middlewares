@@ -13,6 +13,10 @@
     "declarationMap": true,
     "sourceMap": true,
     "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "@aporthq/sdk-node": ["../../sdk/node/src/index.ts"]
+    },
     "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
