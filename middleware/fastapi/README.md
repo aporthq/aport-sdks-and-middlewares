@@ -53,45 +53,52 @@ async def process_refund(request: Request):
 ### 2. Route-Specific Policy Enforcement
 
 ```python
-from aporthq_middleware_fastapi import require_policy, require_policy_with_context
+from fastapi import Depends
+from aporthq_middleware_fastapi import require_policy, require_policy_dependency_with_context
 
 AGENT_ID = "ap_a2d10232c6534523812423eec8a1425c45678"  # Your agent ID
 
 # Explicit agent ID (preferred)
-@app.post("/api/refunds")
+@app.post(
+    "/api/refunds",
+    dependencies=[Depends(require_policy("finance.payment.refund.v1", AGENT_ID))],
+)
 async def process_refund(request: Request):
     # Policy verified with explicit agent ID
     return {"success": True}
 
-# Add the policy middleware
-app.middleware("http")(require_policy("finance.payment.refund.v1", AGENT_ID))
-
 # Header fallback
-@app.post("/api/export")
+@app.post(
+    "/api/export",
+    dependencies=[Depends(require_policy("data.export.create.v1"))],
+)
 async def export_data(request: Request):
     # Policy verified via header
     return {"success": True}
-
-# Add the policy middleware
-app.middleware("http")(require_policy("data.export.create.v1"))  # Uses X-Agent-Passport-Id header
 ```
 
 ### 3. Multiple Policies
 
 ```python
 # Different policies for different routes
-app.middleware("http")(require_policy("finance.payment.refund.v1", AGENT_ID))
-@app.post("/api/refunds")
+@app.post(
+    "/api/refunds",
+    dependencies=[Depends(require_policy("finance.payment.refund.v1", AGENT_ID))],
+)
 async def refunds(request: Request):
     return {"message": "Refund processed"}
 
-app.middleware("http")(require_policy("data.export.create.v1", AGENT_ID))
-@app.post("/api/data/export")
+@app.post(
+    "/api/data/export",
+    dependencies=[Depends(require_policy("data.export.create.v1", AGENT_ID))],
+)
 async def export(request: Request):
     return {"message": "Export created"}
 
-app.middleware("http")(require_policy("messaging.message.send.v1", AGENT_ID))
-@app.post("/api/messages/send")
+@app.post(
+    "/api/messages/send",
+    dependencies=[Depends(require_policy("messaging.message.send.v1", AGENT_ID))],
+)
 async def messaging(request: Request):
     return {"message": "Message sent"}
 ```
@@ -116,14 +123,14 @@ Global middleware that enforces a specific policy on all routes.
 
 ### `require_policy(policy_id, agent_id=None)`
 
-Route-specific middleware that enforces a specific policy.
+Route-specific FastAPI dependency that enforces a specific policy.
 
 **Parameters:**
 
 - `policy_id` (str): Policy ID to enforce (e.g., "finance.payment.refund.v1")
 - `agent_id` (str, optional): Explicit agent ID (preferred over header)
 
-**Returns:** Middleware function
+**Returns:** Dependency callable for `Depends(...)`
 
 **Agent ID Resolution:**
 
@@ -131,9 +138,9 @@ Route-specific middleware that enforces a specific policy.
 2. `X-Agent-Passport-Id` header (fallback)
 3. Fail with 401 error (if neither provided)
 
-### `require_policy_with_context(policy_id, context, agent_id=None)`
+### `require_policy_dependency_with_context(policy_id, context, agent_id=None)`
 
-Route-specific middleware with custom context.
+Route-specific FastAPI dependency with trusted server-side context.
 
 **Parameters:**
 
@@ -141,7 +148,24 @@ Route-specific middleware with custom context.
 - `context` (dict): Custom context data
 - `agent_id` (str, optional): Explicit agent ID
 
-**Returns:** Middleware function
+**Returns:** Dependency callable for `Depends(...)`
+
+### `require_policy_with_context(policy_id, context, agent_id=None)`
+
+HTTP middleware callable with trusted server-side context. This preserves the
+original `app.middleware("http")` integration contract.
+
+```python
+app.middleware("http")(
+    require_policy_with_context(
+        "code.repository.merge.v1",
+        {"repository": "myorg/myrepo", "action": "pr.create", "branch": "main"},
+        AGENT_ID,
+    )
+)
+```
+
+**Returns:** Middleware callable for `app.middleware("http")(...)`
 
 ## Request Object
 
@@ -150,15 +174,16 @@ After successful policy verification, the request object contains:
 ```python
 @app.post("/api/refunds")
 async def process_refund(request: Request):
-    # request.state.agent - Verified agent passport data
+    # request.state.agent - Attribute-accessible agent view.
+    # Policy dependencies always include agent_id. Full passport fields are
+    # available only when a body.passport was supplied or when using passport
+    # view middleware without a policy_id.
     print(request.state.agent.agent_id)        # "ap_a2d10232c6534523812423eec8a1425c45678"
-    print(request.state.agent.assurance_level) # "L2"
-    print(request.state.agent.capabilities)    # ["finance.payment.refund"]
-    
-    # request.state.policy_result - Policy verification result (decision_id, allow, reasons)
-    print(request.state.policy_result.decision_id)
-    print(request.state.policy_result.allow)
-    print(request.state.policy_result.reasons)
+
+    # request.state.policy_result - Policy verification result dict
+    print(request.state.policy_result["decision_id"])
+    print(request.state.policy_result["allow"])
+    print(request.state.policy_result["reasons"])
 ```
 
 ## Available Policies
@@ -281,7 +306,7 @@ app.add_middleware(
 ### E-commerce Refund System
 
 ```python
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from aporthq_middleware_fastapi import require_policy
 
 app = FastAPI()
@@ -289,9 +314,10 @@ app = FastAPI()
 AGENT_ID = "ap_a2d10232c6534523812423eec8a1425c45678"
 
 # Refund processing with policy enforcement
-app.middleware("http")(require_policy("finance.payment.refund.v1", AGENT_ID))
-
-@app.post("/api/refunds")
+@app.post(
+    "/api/refunds",
+    dependencies=[Depends(require_policy("finance.payment.refund.v1", AGENT_ID))],
+)
 async def process_refund(request: Request):
     body = await request.json()
     amount = body.get("amount")
@@ -313,9 +339,10 @@ async def process_refund(request: Request):
 
 ```python
 # Data export with policy enforcement
-app.middleware("http")(require_policy("data.export.create.v1", AGENT_ID))
-
-@app.post("/api/data/export")
+@app.post(
+    "/api/data/export",
+    dependencies=[Depends(require_policy("data.export.create.v1", AGENT_ID))],
+)
 async def export_data(request: Request):
     body = await request.json()
     rows = body.get("rows")
@@ -337,9 +364,10 @@ async def export_data(request: Request):
 
 ```python
 # Messaging with policy enforcement
-app.middleware("http")(require_policy("messaging.message.send.v1", AGENT_ID))
-
-@app.post("/api/messages/send")
+@app.post(
+    "/api/messages/send",
+    dependencies=[Depends(require_policy("messaging.message.send.v1", AGENT_ID))],
+)
 async def send_message(request: Request):
     body = await request.json()
     channel = body.get("channel")

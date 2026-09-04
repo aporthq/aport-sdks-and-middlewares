@@ -398,11 +398,27 @@ export class PolicyVerifier {
   async verifyRepository(
     agentId: string,
     context: {
-      operation: "create_pr" | "merge";
+      action?:
+        | "pr.create"
+        | "pr.update"
+        | "pr.merge"
+        | "repo.push"
+        | "push"
+        | "pull_request.create"
+        | "pull_request.update"
+        | "repo.merge"
+        | "branch.create"
+        | "branch.delete";
+      operation?: "create_pr" | "merge";
       repository: string;
+      branch?: string;
       base_branch?: string;
-      pr_size_kb?: number;
-      file_paths?: string[];
+      head_branch?: string;
+      pr_id?: string | number;
+      merge_method?: string;
+      lines_added?: number;
+      lines_removed?: number;
+      files_changed?: string[];
       github_actor?: string;
       title?: string;
       description?: string;

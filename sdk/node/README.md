@@ -153,7 +153,7 @@ Initializes the PolicyVerifier with an `APortClient` instance.
 #### `verifyRefund(agentId: string, context: { amount: number; currency: string; order_id: string; reason?: string; }, idempotencyKey?: string): Promise<PolicyVerificationResponse>`
 Verifies the `finance.payment.refund.v1` policy.
 
-#### `verifyRepository(agentId: string, context: { operation: "create_pr" | "merge"; repository: string; base_branch?: string; pr_size_kb?: number; file_paths?: string[]; github_actor?: string; title?: string; description?: string; }, idempotencyKey?: string): Promise<PolicyVerificationResponse>`
+#### `verifyRepository(agentId: string, context: { action?: "pr.create" | "pr.update" | "pr.merge" | "repo.push"; operation?: "create_pr" | "merge"; repository: string; branch?: string; base_branch?: string; head_branch?: string; pr_id?: string | number; merge_method?: string; lines_added?: number; lines_removed?: number; files_changed?: string[]; github_actor?: string; title?: string; description?: string; }, idempotencyKey?: string): Promise<PolicyVerificationResponse>`
 Verifies the `code.repository.merge.v1` policy.
 
 #### `verifyDeliverableTaskComplete(agentId: string, context: { task_id: string; output_type: "code" | "document" | "analysis" | "plan" | "data" | "other"; criteria_attestations: Array<{ criterion_id: string; met: boolean; evidence: string }>; summary?: string; tests_passing?: boolean; reviewer_agent_id?: string; author_agent_id?: string; output_content?: string; }, idempotencyKey?: string): Promise<PolicyVerificationResponse>`

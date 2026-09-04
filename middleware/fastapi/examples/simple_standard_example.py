@@ -321,19 +321,19 @@ KEY BENEFITS:
 ✅ EXPLICIT: Agent ID passed explicitly, no header extraction
 ✅ CLEAR: Context comes from your business logic, not hidden
 ✅ STANDARD: Follows FastAPI dependency injection patterns
-✅ SIMPLE: Just two functions: require_policy() and require_policy_with_context()
+✅ SIMPLE: Just two functions: require_policy() and require_policy_dependency_with_context()
 ✅ FLEXIBLE: Can use request body or explicit context
 
 USAGE:
 
 1. Basic (context from request body):
    @app.post("/api/refunds")
-   async def refunds(amount: float, _: dict = require_policy("finance.payment.refund.v1", AGENT_ID)):
+   async def refunds(amount: float, _: dict = Depends(require_policy("finance.payment.refund.v1", AGENT_ID))):
        return {"success": True}
 
 2. Explicit context:
    @app.post("/api/data/export")
-   async def export(rows: int, _: dict = require_policy_with_context("data.export.create.v1", AGENT_ID, {"rows": rows})):
+   async def export(rows: int, _: dict = Depends(require_policy_dependency_with_context("data.export.create.v1", {"rows": rows}, AGENT_ID))):
        return {"success": True}
 
 THAT'S IT! No magic, no header extraction, just explicit and clear middleware.

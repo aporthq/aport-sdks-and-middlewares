@@ -65,6 +65,25 @@ class PolicyMiddlewareOptions:
         self.context = context or {}
 
 
+class AgentState(dict):
+    """JSON-compatible request state object with attribute access for examples."""
+
+    def __getattr__(self, key: str) -> Any:
+        try:
+            return self[key]
+        except KeyError as exc:
+            raise AttributeError(key) from exc
+
+
+def _agent_state(agent_id: Optional[str], passport: Optional[Dict[str, Any]] = None) -> AgentState:
+    data: Dict[str, Any] = {}
+    if passport:
+        data.update(passport)
+    if agent_id:
+        data["agent_id"] = agent_id
+    return AgentState(data)
+
+
 # Default middleware options
 DEFAULT_OPTIONS = AgentPassportMiddlewareOptions()
 
@@ -164,6 +183,119 @@ def create_error_response(
     )
 
 
+def _policy_result_state(decision: Union[PolicyVerificationResponse, Dict[str, Any]]) -> Dict[str, Any]:
+    """Normalize SDK decision responses into a request.state-safe dict."""
+    if isinstance(decision, dict):
+        return decision
+    return _response_to_dict(decision)
+
+
+async def _verify_policy_request(
+    client: APortClient,
+    request: Request,
+    policy_id: str,
+    agent_id: Optional[str] = None,
+    trusted_context: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Shared implementation for route dependencies and middleware helpers."""
+    try:
+        body_json = {}
+        if request.method == "POST":
+            body_json = await _read_and_replay_body(request)
+        body_passport = body_json.get("passport") if isinstance(body_json.get("passport"), dict) else None
+        body_policy = body_json.get("policy") if isinstance(body_json.get("policy"), dict) else None
+
+        extracted_agent_id = extract_agent_id(
+            request,
+            provided_agent_id=agent_id,
+            body_json=body_json,
+            passport_from_body=True,
+        )
+        if not extracted_agent_id and not body_passport:
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "error": "missing_agent_id",
+                    "message": "Agent ID is required. Provide X-Agent-Passport-Id header, function parameter, or body.passport.",
+                },
+            )
+        effective_agent_id = extracted_agent_id or (body_passport.get("agent_id") if body_passport else None)
+
+        request_context = {k: v for k, v in body_json.items() if k not in ("passport", "policy")}
+        merged_context = {**request_context, **(trusted_context or {})}
+
+        if body_policy:
+            decision = await client.verify_policy_with_policy_in_body(
+                body_passport or effective_agent_id,
+                body_policy,
+                merged_context,
+            )
+        elif body_passport:
+            decision = await client.verify_policy_with_passport(
+                body_passport,
+                policy_id,
+                merged_context,
+            )
+        else:
+            decision = await client.verify_policy(
+                effective_agent_id,
+                policy_id,
+                merged_context,
+            )
+
+        if not _decision_allow(decision):
+            meta = _decision_meta(decision)
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "policy_violation",
+                    "message": "Policy violation",
+                    "agent_id": effective_agent_id,
+                    "policy_id": policy_id,
+                    **meta,
+                },
+            )
+
+        request.state.agent = _agent_state(effective_agent_id, body_passport)
+        request.state.policy_result = _policy_result_state(decision)
+        return {
+            "agent": request.state.agent,
+            "policy_result": request.state.policy_result,
+        }
+
+    except HTTPException:
+        raise
+    except AportError as error:
+        raise HTTPException(
+            status_code=error.status,
+            detail={
+                "error": "api_error",
+                "message": error.message,
+                "reasons": getattr(error, "reasons", []),
+            },
+        )
+    except Exception as error:
+        print(f"Policy verification error: {error}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": "Internal server error",
+            },
+        )
+
+
+def _http_exception_to_json_response(error: HTTPException) -> JSONResponse:
+    """Convert dependency-style HTTPException into middleware-style JSON."""
+    if isinstance(error.detail, dict):
+        return JSONResponse(status_code=error.status_code, content=error.detail)
+    return create_error_response(
+        error.status_code,
+        "policy_verification_failed",
+        str(error.detail),
+    )
+
+
 class AgentPassportMiddleware(BaseHTTPMiddleware):
     """FastAPI middleware for Agent Passport verification using the thin client SDK."""
     
@@ -233,11 +365,11 @@ class AgentPassportMiddleware(BaseHTTPMiddleware):
 
             if not self.options.policy_id and not body_policy:
                 if body_passport:
-                    request.state.agent = {"agent_id": body_passport.get("agent_id"), **body_passport}
+                    request.state.agent = _agent_state(body_passport.get("agent_id"), body_passport)
                     return await call_next(request)
                 try:
                     passport_view = await self.client.get_passport_view(effective_agent_id)
-                    request.state.agent = {"agent_id": effective_agent_id, **passport_view}
+                    request.state.agent = _agent_state(effective_agent_id, passport_view)
                     return await call_next(request)
                 except AportError as error:
                     return create_error_response(
@@ -282,7 +414,7 @@ class AgentPassportMiddleware(BaseHTTPMiddleware):
                     },
                 )
 
-            request.state.agent = {"agent_id": effective_agent_id}
+            request.state.agent = _agent_state(effective_agent_id, body_passport)
             request.state.policy_result = decision if isinstance(decision, dict) else {
                 "decision_id": getattr(decision, "decision_id", None),
                 "allow": getattr(decision, "allow", False),
@@ -347,11 +479,11 @@ def agent_passport_middleware(
 
             if not opts.policy_id and not body_policy:
                 if body_passport:
-                    request.state.agent = {"agent_id": body_passport.get("agent_id"), **body_passport}
+                    request.state.agent = _agent_state(body_passport.get("agent_id"), body_passport)
                     return await call_next(request)
                 try:
                     passport_view = await client.get_passport_view(effective_agent_id)
-                    request.state.agent = {"agent_id": effective_agent_id, **passport_view}
+                    request.state.agent = _agent_state(effective_agent_id, passport_view)
                     return await call_next(request)
                 except AportError as error:
                     return create_error_response(
@@ -395,7 +527,7 @@ def agent_passport_middleware(
                     },
                 )
 
-            request.state.agent = {"agent_id": effective_agent_id}
+            request.state.agent = _agent_state(effective_agent_id, body_passport)
             request.state.policy_result = decision if isinstance(decision, dict) else {
                 "decision_id": getattr(decision, "decision_id", None),
                 "allow": getattr(decision, "allow", False),
@@ -422,90 +554,27 @@ def require_policy(policy_id: str, agent_id: Optional[str] = None) -> Callable:
     client = create_client()
 
     async def policy_dependency(request: Request):
-        try:
-            body_json = {}
-            if request.method == "POST":
-                body_json = await _read_and_replay_body(request)
-            body_passport = body_json.get("passport") if isinstance(body_json.get("passport"), dict) else None
-            body_policy = body_json.get("policy") if isinstance(body_json.get("policy"), dict) else None
+        return await _verify_policy_request(client, request, policy_id, agent_id)
 
-            extracted_agent_id = extract_agent_id(request, body_json=body_json, passport_from_body=True)
-            if not extracted_agent_id and not body_passport:
-                raise HTTPException(
-                    status_code=401,
-                    detail={
-                        "error": "missing_agent_id",
-                        "message": "Agent ID is required. Provide X-Agent-Passport-Id header, function parameter, or body.passport.",
-                    },
-                )
-            effective_agent_id = extracted_agent_id or (body_passport.get("agent_id") if body_passport else None)
+    return policy_dependency
 
-            context = {k: v for k, v in body_json.items() if k not in ("passport", "policy")}
 
-            if body_policy:
-                decision = await client.verify_policy_with_policy_in_body(
-                    body_passport or effective_agent_id,
-                    body_policy,
-                    context,
-                )
-            elif body_passport:
-                decision = await client.verify_policy_with_passport(
-                    body_passport,
-                    policy_id,
-                    context,
-                )
-            else:
-                decision = await client.verify_policy(
-                    effective_agent_id,
-                    policy_id,
-                    context,
-                )
+def require_policy_dependency_with_context(
+    policy_id: str,
+    context: Dict[str, Any],
+    agent_id: Optional[str] = None,
+) -> Callable:
+    """Route-specific dependency with trusted server context; supports body.passport, body.policy."""
+    client = create_client()
 
-            if not _decision_allow(decision):
-                meta = _decision_meta(decision)
-                raise HTTPException(
-                    status_code=403,
-                    detail={
-                        "error": "policy_violation",
-                        "message": "Policy violation",
-                        "agent_id": effective_agent_id,
-                        "policy_id": policy_id,
-                        **meta,
-                    },
-                )
-
-            request.state.agent = {"agent_id": effective_agent_id}
-            request.state.policy_result = decision if isinstance(decision, dict) else {
-                "decision_id": getattr(decision, "decision_id", None),
-                "allow": getattr(decision, "allow", False),
-                "reasons": getattr(decision, "reasons", None) or [],
-            }
-            return {
-                "agent": request.state.agent,
-                "policy_result": request.state.policy_result,
-            }
-
-        except HTTPException:
-            # Re-raise HTTPException as-is
-            raise
-        except AportError as error:
-            raise HTTPException(
-                status_code=error.status,
-                detail={
-                    "error": "api_error",
-                    "message": error.message,
-                    "reasons": getattr(error, "reasons", [])
-                }
-            )
-        except Exception as error:
-            print(f"Policy verification error: {error}")
-            raise HTTPException(
-                status_code=500,
-                detail={
-                    "error": "internal_error",
-                    "message": "Internal server error"
-                }
-            )
+    async def policy_dependency(request: Request):
+        return await _verify_policy_request(
+            client,
+            request,
+            policy_id,
+            agent_id,
+            trusted_context=context,
+        )
 
     return policy_dependency
 
@@ -515,79 +584,22 @@ def require_policy_with_context(
     context: Dict[str, Any],
     agent_id: Optional[str] = None,
 ) -> Callable:
-    """Route-specific middleware with custom context; supports body.passport, body.policy."""
+    """HTTP middleware with trusted server context; use app.middleware("http")(...)."""
     client = create_client()
 
     async def middleware(request: Request, call_next):
         try:
-            body_json = {}
-            if request.method == "POST":
-                body_json = await _read_and_replay_body(request)
-            body_passport = body_json.get("passport") if isinstance(body_json.get("passport"), dict) else None
-            body_policy = body_json.get("policy") if isinstance(body_json.get("policy"), dict) else None
-
-            extracted_agent_id = extract_agent_id(request, provided_agent_id=agent_id, body_json=body_json, passport_from_body=True)
-            if not extracted_agent_id and not body_passport:
-                return create_error_response(
-                    401,
-                    "missing_agent_id",
-                    "Agent ID is required. Provide X-Agent-Passport-Id header, function parameter, or body.passport.",
-                )
-            effective_agent_id = extracted_agent_id or (body_passport.get("agent_id") if body_passport else None)
-
-            request_context = {k: v for k, v in body_json.items() if k not in ("passport", "policy")}
-            merged_context = {**request_context, **context}
-
-            if body_policy:
-                decision = await client.verify_policy_with_policy_in_body(
-                    body_passport or effective_agent_id,
-                    body_policy,
-                    merged_context,
-                )
-            elif body_passport:
-                decision = await client.verify_policy_with_passport(
-                    body_passport,
-                    policy_id,
-                    merged_context,
-                )
-            else:
-                decision = await client.verify_policy(
-                    effective_agent_id,
-                    policy_id,
-                    merged_context,
-                )
-
-            if not _decision_allow(decision):
-                meta = _decision_meta(decision)
-                return create_error_response(
-                    403,
-                    "policy_violation",
-                    "Policy violation",
-                    {
-                        "agent_id": effective_agent_id,
-                        "policy_id": policy_id,
-                        **meta,
-                    },
-                )
-
-            request.state.agent = {"agent_id": effective_agent_id}
-            request.state.policy_result = decision if isinstance(decision, dict) else {
-                "decision_id": getattr(decision, "decision_id", None),
-                "allow": getattr(decision, "allow", False),
-                "reasons": getattr(decision, "reasons", None) or [],
-            }
+            await _verify_policy_request(
+                client,
+                request,
+                policy_id,
+                agent_id,
+                trusted_context=context,
+            )
             return await call_next(request)
 
-        except AportError as error:
-            return create_error_response(
-                error.status,
-                "api_error",
-                error.message,
-                {"reasons": getattr(error, "reasons", [])},
-            )
-        except Exception as error:
-            print(f"Policy verification error: {error}")
-            return create_error_response(500, "internal_error", "Internal server error")
+        except HTTPException as error:
+            return _http_exception_to_json_response(error)
 
     return middleware
 
