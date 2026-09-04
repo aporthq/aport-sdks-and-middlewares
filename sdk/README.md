@@ -125,7 +125,7 @@ All SDKs call `POST /api/verify/policy/{pack_id}`. Supported `pack_id` values (f
 | agent.session.create.v1 | agent.session.create | L0 |
 | agent.tool.register.v1 | agent.tool.register | L0 |
 | code.release.publish.v1 | repo.release | L3 |
-| code.repository.merge.v1 | repo.pr.create, repo.merge | L2 |
+| code.repository.merge.v1 | repo.pr.create, repo.merge, repo.push | L2 |
 | data.export.create.v1 | data.export | L1 |
 | data.file.read.v1 | data.file.read | L0 |
 | data.file.write.v1 | data.file.write | L0 |

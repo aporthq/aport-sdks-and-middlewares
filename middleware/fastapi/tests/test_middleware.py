@@ -13,6 +13,8 @@ from aporthq_middleware_fastapi import (
     require_refund_policy,
     require_data_export_policy,
     AgentPassportMiddlewareOptions,
+    require_policy_dependency_with_context,
+    require_policy_with_context,
 )
 from aporthq_sdk_python import AgentPassport, AportError
 from aporthq_sdk_python.decision_types import PolicyVerificationResponse
@@ -238,6 +240,145 @@ class TestRequirePolicy:
             assert response.status_code == 200
             assert response.json()["success"] is True
             assert response.json()["policy_data"]["agent"]["agent_id"] == "ap_test123"
+
+    @patch('aporthq_middleware_fastapi.middleware.create_client')
+    def test_require_policy_uses_configured_agent_id(self, mock_create_client):
+        """Configured hosted passport IDs should not require a request header."""
+        mock_client = Mock()
+        mock_client.verify_policy = AsyncMock(return_value={
+            'decision_id': 'dec_123',
+            'allow': True,
+            'reasons': []
+        })
+        mock_create_client.return_value = mock_client
+
+        @self.app.post("/read-file")
+        async def read_file_endpoint(
+            policy_data: dict = Depends(require_policy("data.file.read.v1", "ap_configured123"))
+        ):
+            return {"success": True, "policy_data": policy_data}
+
+        with TestClient(self.app) as client:
+            response = client.post(
+                "/read-file",
+                json={"file_path": "/tmp/report.txt"}
+            )
+
+            assert response.status_code == 200
+            assert response.json()["policy_data"]["agent"]["agent_id"] == "ap_configured123"
+            mock_client.verify_policy.assert_awaited_once()
+            assert mock_client.verify_policy.await_args.args[0] == "ap_configured123"
+
+    @patch('aporthq_middleware_fastapi.middleware.create_client')
+    def test_require_policy_sets_attribute_accessible_agent_state(self, mock_create_client):
+        """Route examples can use request.state.agent.agent_id after verification."""
+        mock_client = Mock()
+        mock_client.verify_policy = AsyncMock(return_value={
+            'decision_id': 'dec_123',
+            'allow': True,
+            'reasons': []
+        })
+        mock_create_client.return_value = mock_client
+
+        @self.app.post("/read-file")
+        async def read_file_endpoint(
+            request: Request,
+            policy_data: dict = Depends(require_policy("data.file.read.v1", "ap_configured123"))
+        ):
+            return {
+                "agent_id_from_state": request.state.agent.agent_id,
+                "agent_id_from_dependency": policy_data["agent"]["agent_id"],
+            }
+
+        with TestClient(self.app) as client:
+            response = client.post("/read-file", json={"file_path": "/tmp/report.txt"})
+
+            assert response.status_code == 200
+            assert response.json()["agent_id_from_state"] == "ap_configured123"
+            assert response.json()["agent_id_from_dependency"] == "ap_configured123"
+
+    @patch('aporthq_middleware_fastapi.middleware.create_client')
+    def test_require_policy_dependency_with_context_is_dependency(self, mock_create_client):
+        """Context helper must be dependency-shaped for FastAPI Depends."""
+        mock_client = Mock()
+        mock_client.verify_policy = AsyncMock(return_value={
+            'decision_id': 'dec_123',
+            'allow': True,
+            'reasons': []
+        })
+        mock_create_client.return_value = mock_client
+
+        @self.app.post("/repo/pr")
+        async def create_pr_endpoint(
+            request: Request,
+            policy_data: dict = Depends(
+                require_policy_dependency_with_context(
+                    "code.repository.merge.v1",
+                    {"action": "pr.create", "repository": "aporthq/agent-passport"},
+                    "ap_configured123",
+                )
+            )
+        ):
+            return {
+                "agent_id": request.state.agent.agent_id,
+                "decision_id": policy_data["policy_result"]["decision_id"],
+            }
+
+        with TestClient(self.app) as client:
+            response = client.post("/repo/pr", json={"title": "Add guardrail"})
+
+            assert response.status_code == 200
+            assert response.json() == {"agent_id": "ap_configured123", "decision_id": "dec_123"}
+            mock_client.verify_policy.assert_awaited_once_with(
+                "ap_configured123",
+                "code.repository.merge.v1",
+                {
+                    "title": "Add guardrail",
+                    "action": "pr.create",
+                    "repository": "aporthq/agent-passport",
+                },
+            )
+
+    @patch('aporthq_middleware_fastapi.middleware.create_client')
+    def test_require_policy_with_context_preserves_middleware_contract(self, mock_create_client):
+        """Existing app.middleware("http") users must keep working after upgrade."""
+        mock_client = Mock()
+        mock_client.verify_policy = AsyncMock(return_value={
+            'decision_id': 'dec_456',
+            'allow': True,
+            'reasons': []
+        })
+        mock_create_client.return_value = mock_client
+
+        self.app.middleware("http")(
+            require_policy_with_context(
+                "code.repository.merge.v1",
+                {"action": "pr.create", "repository": "aporthq/agent-passport"},
+                "ap_configured123",
+            )
+        )
+
+        @self.app.post("/repo/pr")
+        async def create_pr_endpoint(request: Request):
+            return {
+                "agent_id": request.state.agent.agent_id,
+                "decision_id": request.state.policy_result["decision_id"],
+            }
+
+        with TestClient(self.app) as client:
+            response = client.post("/repo/pr", json={"title": "Add guardrail"})
+
+            assert response.status_code == 200
+            assert response.json() == {"agent_id": "ap_configured123", "decision_id": "dec_456"}
+            mock_client.verify_policy.assert_awaited_once_with(
+                "ap_configured123",
+                "code.repository.merge.v1",
+                {
+                    "title": "Add guardrail",
+                    "action": "pr.create",
+                    "repository": "aporthq/agent-passport",
+                },
+            )
 
     @patch('aporthq_middleware_fastapi.middleware.create_client')
     def test_require_policy_failure(self, mock_create_client):

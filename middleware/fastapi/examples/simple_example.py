@@ -7,14 +7,15 @@ This example demonstrates the three main usage patterns:
 3. Route-specific with header fallback
 """
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import Depends, FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
+import time
 import uvicorn
 
 from aporthq_middleware_fastapi import (
     agent_passport_middleware,
     require_policy,
-    require_policy_with_context,
+    require_policy_dependency_with_context,
     AgentPassportMiddlewareOptions,
 )
 
@@ -69,7 +70,10 @@ async def process_refund(request: Request):
 Explicit agent ID is most secure and clear.
 No header extraction needed.
 """
-@app.post("/api/data/export")
+@app.post(
+    "/api/data/export",
+    dependencies=[Depends(require_policy("data.export.create.v1", AGENT_ID))],
+)
 async def export_data(request: Request):
     """Export data with explicit agent ID."""
     # Policy verified with explicit agent ID
@@ -87,9 +91,6 @@ async def export_data(request: Request):
         "agent_id": request.state.agent.agent_id
     })
 
-# Add the policy middleware
-app.middleware("http")(require_policy("data.export.create.v1", AGENT_ID))
-
 # ============================================================================
 # PATTERN 3: ROUTE-SPECIFIC WITH HEADER FALLBACK
 # ============================================================================
@@ -98,7 +99,10 @@ app.middleware("http")(require_policy("data.export.create.v1", AGENT_ID))
 Header fallback for backward compatibility.
 Uses X-Agent-Passport-Id header.
 """
-@app.post("/api/messages/send")
+@app.post(
+    "/api/messages/send",
+    dependencies=[Depends(require_policy("messaging.message.send.v1"))],
+)
 async def send_message(request: Request):
     """Send message with header fallback."""
     # Policy verified via header
@@ -116,9 +120,6 @@ async def send_message(request: Request):
         "agent_id": request.state.agent.agent_id
     })
 
-# Add the policy middleware
-app.middleware("http")(require_policy("messaging.message.send.v1"))  # No agent ID - uses header
-
 # ============================================================================
 # PATTERN 4: CUSTOM CONTEXT
 # ============================================================================
@@ -126,7 +127,23 @@ app.middleware("http")(require_policy("messaging.message.send.v1"))  # No agent 
 """
 Custom context for complex scenarios.
 """
-@app.post("/api/repo/pr")
+@app.post(
+    "/api/repo/pr",
+    dependencies=[
+        Depends(
+            require_policy_dependency_with_context(
+                "code.repository.merge.v1",
+                {
+                    "action": "pr.create",
+                    "branch": "main",
+                    "repository": "myorg/myrepo",
+                    "base_branch": "main"
+                },
+                AGENT_ID
+            )
+        )
+    ],
+)
 async def create_pr(request: Request):
     """Create PR with custom context."""
     # Policy verified with custom context
@@ -143,18 +160,6 @@ async def create_pr(request: Request):
         "file_path": file_path,
         "agent_id": request.state.agent.agent_id
     })
-
-# Add the policy middleware with custom context
-app.middleware("http")(
-    require_policy_with_context(
-        "code.repository.merge.v1",
-        {
-            "repository": "myorg/myrepo",
-            "base_branch": "main"
-        },
-        AGENT_ID
-    )
-)
 
 # ============================================================================
 # ERROR HANDLING
@@ -237,13 +242,13 @@ KEY PATTERNS:
    app.add_middleware(agent_passport_middleware, options=AgentPassportMiddlewareOptions(policy_id="finance.payment.refund.v1"))
 
 ✅ EXPLICIT: Most secure, explicit agent ID
-   app.middleware("http")(require_policy("finance.payment.refund.v1", AGENT_ID))
+   @app.post("/api/refunds", dependencies=[Depends(require_policy("finance.payment.refund.v1", AGENT_ID))])
 
 ✅ HEADER: Backward compatible, uses header
-   app.middleware("http")(require_policy("data.export.create.v1"))
+   @app.post("/api/export", dependencies=[Depends(require_policy("data.export.create.v1"))])
 
 ✅ CONTEXT: Custom context for complex scenarios
-   app.middleware("http")(require_policy_with_context("code.repository.merge.v1", context, AGENT_ID))
+   @app.post("/api/pr", dependencies=[Depends(require_policy_dependency_with_context("code.repository.merge.v1", context, AGENT_ID))])
 
 THAT'S IT! Simple, clear, and powerful policy enforcement.
 """

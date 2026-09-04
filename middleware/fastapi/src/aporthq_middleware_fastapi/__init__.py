@@ -7,6 +7,7 @@ from .middleware import (
     AgentRequest,
     agent_passport_middleware,
     require_policy,
+    require_policy_dependency_with_context,
     require_policy_with_context,
     require_refund_policy,
     require_data_export_policy,
@@ -52,6 +53,7 @@ __all__ = [
     # Middleware functions
     "agent_passport_middleware",
     "require_policy",
+    "require_policy_dependency_with_context",
     "require_policy_with_context",
     "require_refund_policy",
     "require_data_export_policy",
