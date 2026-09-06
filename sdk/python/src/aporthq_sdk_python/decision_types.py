@@ -19,6 +19,8 @@ class PolicyVerificationRequestBody:
     context: Dict[str, Any]  # must include agent_id or provide passport
     passport: Optional[Dict[str, Any]] = None  # local mode
     policy: Optional[PolicyPack] = None  # required when pack_id is IN_BODY
+    runtime: Optional[Dict[str, Any]] = None  # non-policy runtime metadata
+    enforcement_mode: Optional[str] = None  # shorthand for runtime.enforcement_mode
 
 
 # Convenience shape; SDK builds PolicyVerificationRequestBody from this
@@ -31,6 +33,8 @@ class PolicyVerificationRequest:
     context: Dict[str, Any] = field(default_factory=dict)
     passport: Optional[Dict[str, Any]] = None  # passport in body (local mode)
     policy: Optional[PolicyPack] = None  # policy in body (use path IN_BODY)
+    runtime: Optional[Dict[str, Any]] = None  # non-policy runtime metadata
+    enforcement_mode: Optional[str] = None
 
 
 @dataclass
@@ -52,6 +56,13 @@ class PolicyVerificationResponse:
     policy_hash: Optional[str] = None
     policy_version: Optional[str] = None
     github: Optional[Dict[str, Any]] = None
+    runtime: Optional[Dict[str, Any]] = None
+    enforcement_mode: Optional[str] = None
+    expected_runtime_disposition: Optional[str] = None
+    runtime_disposition: Optional[str] = None
+    enforced_by: Optional[str] = None
+    harness: Optional[str] = None
+    reported_at: Optional[str] = None
     signature_status: Optional[Dict[str, Any]] = None
     signature_valid: Optional[bool] = None
     integrity_valid: Optional[bool] = None
@@ -64,6 +75,20 @@ class PolicyVerificationResponse:
         payload = dict(decision) if decision is not None else dict(data)
         if "_meta" in data and "_meta" not in payload:
             payload["_meta"] = data["_meta"]
+        if "runtime" in data and "runtime" not in payload:
+            payload["runtime"] = data["runtime"]
+        runtime = payload.get("runtime")
+        if isinstance(runtime, dict):
+            for key in (
+                "enforcement_mode",
+                "expected_runtime_disposition",
+                "runtime_disposition",
+                "enforced_by",
+                "harness",
+                "reported_at",
+            ):
+                if key in runtime and key not in payload:
+                    payload[key] = runtime[key]
         fields = set(cls.__dataclass_fields__)
         kwargs = {k: payload[k] for k in fields if k in payload}
         return cls(**kwargs)
