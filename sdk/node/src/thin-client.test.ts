@@ -198,6 +198,67 @@ describe("APortClient", () => {
       expect(result).toMatchObject(mockResponse);
     });
 
+    it("should send runtime metadata outside policy context and expose it from wrapped responses", async () => {
+      const runtime = {
+        enforcement_mode: "warn" as const,
+        enforced_by: "cursor",
+        harness: "cursor",
+      };
+      const responseRuntime = {
+        ...runtime,
+        expected_runtime_disposition: "continued_after_warning" as const,
+        runtime_disposition: "not_reported" as const,
+        reported_at: "2026-09-05T23:15:00.000Z",
+      };
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Map(),
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              decision: {
+                decision_id: "dec_warn",
+                allow: false,
+                reasons: [],
+                created_at: "2023-01-01T00:00:00Z",
+              },
+              runtime: responseRuntime,
+            })
+          ),
+      });
+
+      const result = await client.verifyPolicy(
+        "agent-123",
+        "system.command.execute.v1",
+        { command: "rm -rf /tmp/demo" },
+        undefined,
+        { runtime }
+      );
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `${TEST_BASE_URL}/api/verify/policy/system.command.execute.v1`,
+        expect.objectContaining({
+          body: JSON.stringify({
+            context: {
+              agent_id: "agent-123",
+              policy_id: "system.command.execute.v1",
+              command: "rm -rf /tmp/demo",
+            },
+            runtime,
+          }),
+        })
+      );
+      expect(result).toMatchObject({
+        decision_id: "dec_warn",
+        allow: false,
+        runtime: responseRuntime,
+        enforcement_mode: "warn",
+        expected_runtime_disposition: "continued_after_warning",
+        runtime_disposition: "not_reported",
+        reported_at: "2026-09-05T23:15:00.000Z",
+      });
+    });
+
     it("should normalize base URL correctly", async () => {
       const baseWithSlash = TEST_BASE_URL.replace(/\/?$/, "/");
       const clientWithTrailingSlash = new APortClient({
@@ -370,7 +431,8 @@ describe("PolicyVerifier", () => {
       const result = await verifier.verifyRepository("agent-123", {
         operation: "create_pr",
         repository: "my-org/my-repo",
-        pr_size_kb: 500,
+        lines_added: 250,
+        lines_removed: 25,
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
@@ -383,7 +445,8 @@ describe("PolicyVerifier", () => {
               policy_id: "code.repository.merge.v1",
               operation: "create_pr",
               repository: "my-org/my-repo",
-              pr_size_kb: 500,
+              lines_added: 250,
+              lines_removed: 25,
             },
           }),
         })
