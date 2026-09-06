@@ -152,6 +152,8 @@ class APortClient:
         context: Optional[Dict[str, Any]] = None,
         passport: Optional[Dict[str, Any]] = None,
         policy: Optional[PolicyPack] = None,
+        runtime: Optional[Dict[str, Any]] = None,
+        enforcement_mode: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Build request body for POST /api/verify/policy/{pack_id}. API expects context, optional passport, optional policy."""
         ctx = dict(context or {})
@@ -166,6 +168,10 @@ class APortClient:
             body["passport"] = passport
         if policy is not None:
             body["policy"] = policy
+        if runtime is not None:
+            body["runtime"] = runtime
+        if enforcement_mode is not None:
+            body["enforcement_mode"] = enforcement_mode
         return body
 
     async def verify_policy(
@@ -177,6 +183,8 @@ class APortClient:
         *,
         passport: Optional[Dict[str, Any]] = None,
         policy: Optional[PolicyPack] = None,
+        runtime: Optional[Dict[str, Any]] = None,
+        enforcement_mode: Optional[str] = None,
     ) -> PolicyVerificationResponse:
         """Verify a policy against an agent (cloud mode). Optionally pass passport and/or policy in body."""
         body = self._build_policy_request_body(
@@ -186,6 +194,8 @@ class APortClient:
             context=context,
             passport=passport,
             policy=policy,
+            runtime=runtime,
+            enforcement_mode=enforcement_mode,
         )
         path = "/api/verify/policy/IN_BODY" if policy is not None else f"/api/verify/policy/{policy_id}"
         response_data = await self._make_request(
@@ -202,6 +212,9 @@ class APortClient:
         policy_id: str,
         context: Optional[Dict[str, Any]] = None,
         idempotency_key: Optional[str] = None,
+        *,
+        runtime: Optional[Dict[str, Any]] = None,
+        enforcement_mode: Optional[str] = None,
     ) -> PolicyVerificationResponse:
         """Verify a policy using passport in body (local mode; no registry fetch)."""
         agent_id = passport.get("agent_id")
@@ -211,6 +224,8 @@ class APortClient:
             idempotency_key=idempotency_key,
             context=context or {},
             passport=passport,
+            runtime=runtime,
+            enforcement_mode=enforcement_mode,
         )
         response_data = await self._make_request(
             "POST",
@@ -226,6 +241,9 @@ class APortClient:
         policy: PolicyPack,
         context: Optional[Dict[str, Any]] = None,
         idempotency_key: Optional[str] = None,
+        *,
+        runtime: Optional[Dict[str, Any]] = None,
+        enforcement_mode: Optional[str] = None,
     ) -> PolicyVerificationResponse:
         """Verify using policy pack in body (pack_id = IN_BODY). Pass agent_id (cloud) or passport dict (local)."""
         if isinstance(agent_id_or_passport, dict):
@@ -241,6 +259,8 @@ class APortClient:
             context=context or {},
             passport=passport,
             policy=policy,
+            runtime=runtime,
+            enforcement_mode=enforcement_mode,
         )
         response_data = await self._make_request(
             "POST",

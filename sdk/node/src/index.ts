@@ -20,6 +20,11 @@ export type {
   PolicyVerificationRequest,
   PolicyVerificationRequestBody,
   PolicyVerificationResponse,
+  EnforcementMode,
+  ExpectedRuntimeDisposition,
+  RuntimeDisposition,
+  RuntimeVerificationMetadata,
+  RuntimeVerificationRequestMetadata,
   PolicyPack,
   Jwks,
 } from "./types/decision";
