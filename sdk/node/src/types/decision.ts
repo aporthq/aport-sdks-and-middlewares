@@ -12,6 +12,35 @@ export interface PolicyPack {
   [key: string]: any;
 }
 
+export type EnforcementMode = "enforce" | "warn" | "fail-open-on-api-error";
+
+export type ExpectedRuntimeDisposition =
+  | "allowed"
+  | "blocked"
+  | "continued_after_warning"
+  | "continued_after_fail_open"
+  | "not_reported";
+
+export type RuntimeDisposition =
+  | "allowed"
+  | "blocked"
+  | "continued_after_warning"
+  | "continued_after_fail_open"
+  | "not_reported";
+
+export interface RuntimeVerificationRequestMetadata {
+  enforcement_mode?: EnforcementMode;
+  runtime_disposition?: RuntimeDisposition;
+  enforced_by?: string;
+  harness?: string;
+  reported_at?: string;
+}
+
+export interface RuntimeVerificationMetadata
+  extends RuntimeVerificationRequestMetadata {
+  expected_runtime_disposition?: ExpectedRuntimeDisposition;
+}
+
 /**
  * Request body for POST /api/verify/policy/{pack_id}.
  * - context is required and must contain agent_id (or provide passport for local mode).
@@ -26,6 +55,8 @@ export interface PolicyVerificationRequestBody {
   };
   passport?: PassportData;
   policy?: PolicyPack;
+  runtime?: RuntimeVerificationRequestMetadata;
+  enforcement_mode?: EnforcementMode;
 }
 
 /** Convenience shape: agent_id + context. SDK builds body.context from this. */
@@ -37,6 +68,9 @@ export interface PolicyVerificationRequest {
   passport?: PassportData;
   /** Policy pack in body (use pack_id IN_BODY). When set, path is /api/verify/policy/IN_BODY. */
   policy?: PolicyPack;
+  /** Optional non-policy runtime metadata for audit display. */
+  runtime?: RuntimeVerificationRequestMetadata;
+  enforcement_mode?: EnforcementMode;
 }
 
 export interface PolicyVerificationResponse {
@@ -67,6 +101,12 @@ export interface PolicyVerificationResponse {
     job_workflow_ref?: string;
     host?: string;
   };
+  runtime?: RuntimeVerificationMetadata;
+  enforcement_mode?: EnforcementMode;
+  expected_runtime_disposition?: ExpectedRuntimeDisposition;
+  runtime_disposition?: RuntimeDisposition;
+  enforced_by?: string;
+  harness?: string;
   signature_status?: {
     signature_valid?: boolean;
     integrity_valid?: boolean;
