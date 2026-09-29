@@ -62,7 +62,7 @@ class APortClient:
                 headers={
                     "Content-Type": "application/json",
                     "Accept": "application/json",
-                    "User-Agent": "aport-sdk-python/0.1.0",
+                    "User-Agent": "aport-sdk-python/0.1.61",
                 },
             )
 

@@ -51,7 +51,7 @@ describe("APortClient", () => {
           headers: {
             "Content-Type": "application/json",
             Accept: "application/json",
-            "User-Agent": "aport-sdk-js/0.1.6",
+            "User-Agent": "aport-sdk-js/0.1.61",
             Authorization: "Bearer test-key",
           },
           body: JSON.stringify({
@@ -346,7 +346,7 @@ describe("APortClient", () => {
           headers: {
             "Content-Type": "application/json",
             Accept: "application/json",
-            "User-Agent": "aport-sdk-js/0.1.6",
+            "User-Agent": "aport-sdk-js/0.1.61",
             Authorization: "Bearer test-key",
           },
         })

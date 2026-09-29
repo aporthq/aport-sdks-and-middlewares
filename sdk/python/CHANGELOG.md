@@ -4,6 +4,11 @@ All notable changes to the Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.1.61] - 2026-09-29
+
+### Fixed
+- Bump Python SDK package, exported version, and runtime user-agent metadata to 0.1.61.
+
 ## [0.1.6] - 2026-08-21
 
 ### Fixed
