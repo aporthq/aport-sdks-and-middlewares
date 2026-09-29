@@ -8,6 +8,8 @@ import {
   PolicyVerificationRequest,
   PolicyVerificationRequestBody,
   PolicyVerificationResponse,
+  RuntimeVerificationMetadata,
+  RuntimeVerificationRequestMetadata,
   PolicyPack,
   Jwks,
 } from "./types/decision";
@@ -44,7 +46,12 @@ export class APortClient {
     policyId: string,
     context: Record<string, any> = {},
     idempotencyKey?: string,
-    options?: { passport?: PassportData; policy?: PolicyPack }
+    options?: {
+      passport?: PassportData;
+      policy?: PolicyPack;
+      runtime?: RuntimeVerificationRequestMetadata;
+      enforcementMode?: RuntimeVerificationMetadata["enforcement_mode"];
+    }
   ): Promise<PolicyVerificationResponse> {
     const body = this.buildPolicyRequestBody({
       agent_id: agentId,
@@ -53,13 +60,15 @@ export class APortClient {
       idempotency_key: idempotencyKey,
       passport: options?.passport,
       policy: options?.policy,
+      runtime: options?.runtime,
+      enforcement_mode: options?.enforcementMode,
     });
     const path =
       options?.policy != null
         ? "/api/verify/policy/IN_BODY"
         : `/api/verify/policy/${policyId}`;
     const res = await this.post(path, body, idempotencyKey);
-    return (res.decision != null ? res.decision : res) as PolicyVerificationResponse;
+    return this.unwrapPolicyVerificationResponse(res);
   }
 
   /**
@@ -69,7 +78,11 @@ export class APortClient {
     passport: PassportData,
     policyId: string,
     context: Record<string, any> = {},
-    idempotencyKey?: string
+    idempotencyKey?: string,
+    options?: {
+      runtime?: RuntimeVerificationRequestMetadata;
+      enforcementMode?: RuntimeVerificationMetadata["enforcement_mode"];
+    }
   ): Promise<PolicyVerificationResponse> {
     const body = this.buildPolicyRequestBody({
       agent_id: passport.agent_id,
@@ -77,9 +90,11 @@ export class APortClient {
       idempotency_key: idempotencyKey,
       context,
       passport,
+      runtime: options?.runtime,
+      enforcement_mode: options?.enforcementMode,
     });
     const res = await this.post(`/api/verify/policy/${policyId}`, body, idempotencyKey);
-    return (res.decision != null ? res.decision : res) as PolicyVerificationResponse;
+    return this.unwrapPolicyVerificationResponse(res);
   }
 
   /**
@@ -89,7 +104,11 @@ export class APortClient {
     agentIdOrPassport: string | PassportData,
     policy: PolicyPack,
     context: Record<string, any> = {},
-    idempotencyKey?: string
+    idempotencyKey?: string,
+    options?: {
+      runtime?: RuntimeVerificationRequestMetadata;
+      enforcementMode?: RuntimeVerificationMetadata["enforcement_mode"];
+    }
   ): Promise<PolicyVerificationResponse> {
     const isPassport =
       typeof agentIdOrPassport === "object" &&
@@ -106,9 +125,11 @@ export class APortClient {
       context,
       passport,
       policy,
+      runtime: options?.runtime,
+      enforcement_mode: options?.enforcementMode,
     });
     const res = await this.post("/api/verify/policy/IN_BODY", body, idempotencyKey);
-    return (res.decision != null ? res.decision : res) as PolicyVerificationResponse;
+    return this.unwrapPolicyVerificationResponse(res);
   }
 
   /** Build request body for /api/verify/policy/{pack_id}. */
@@ -119,6 +140,8 @@ export class APortClient {
     context: Record<string, any>;
     passport?: PassportData;
     policy?: PolicyPack;
+    runtime?: RuntimeVerificationRequestMetadata;
+    enforcement_mode?: RuntimeVerificationMetadata["enforcement_mode"];
   }): PolicyVerificationRequestBody {
     const {
       agent_id,
@@ -127,6 +150,8 @@ export class APortClient {
       context: contextFields,
       passport,
       policy,
+      runtime,
+      enforcement_mode,
     } = opts;
     const context = {
       ...(agent_id != null && { agent_id }),
@@ -137,7 +162,35 @@ export class APortClient {
     const body: PolicyVerificationRequestBody = { context };
     if (passport) body.passport = passport;
     if (policy) body.policy = policy;
+    if (runtime) body.runtime = runtime;
+    if (enforcement_mode) body.enforcement_mode = enforcement_mode;
     return body;
+  }
+
+  private unwrapPolicyVerificationResponse(res: any): PolicyVerificationResponse {
+    const decision = (res?.decision != null ? res.decision : res) as Record<
+      string,
+      unknown
+    >;
+    if (res?.runtime && !decision.runtime) {
+      return {
+        ...decision,
+        runtime: res.runtime,
+        ...(res.runtime.enforcement_mode && {
+          enforcement_mode: res.runtime.enforcement_mode,
+        }),
+        ...(res.runtime.expected_runtime_disposition && {
+          expected_runtime_disposition: res.runtime.expected_runtime_disposition,
+        }),
+        ...(res.runtime.runtime_disposition && {
+          runtime_disposition: res.runtime.runtime_disposition,
+        }),
+        ...(res.runtime.enforced_by && { enforced_by: res.runtime.enforced_by }),
+        ...(res.runtime.harness && { harness: res.runtime.harness }),
+        ...(res.runtime.reported_at && { reported_at: res.runtime.reported_at }),
+      } as PolicyVerificationResponse;
+    }
+    return decision as unknown as PolicyVerificationResponse;
   }
 
   /**
