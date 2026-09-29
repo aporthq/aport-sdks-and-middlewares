@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.61
+
+### Patch Changes
+
+- Bump Node SDK package and runtime user-agent metadata to 0.1.61.
+
 ## 0.1.6
 
 ### Patch Changes
